@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Switches the Prisma datasource provider: `node scripts/set-db-provider.mjs postgresql` (or sqlite).
-// For PostgreSQL, a direct (non-pooled) connection is wired in when one is available, because
+// For PostgreSQL it picks up whichever connection variables the host provides (Vercel/Neon integrations
+// use different names) and wires a direct, non-pooled URL for migrations when one is available —
 // migrations cannot run through a transaction-mode pooler (Neon, Supabase, PgBouncer).
 import fs from "node:fs";
 
@@ -10,32 +11,38 @@ if (!["postgresql", "sqlite"].includes(provider)) {
   process.exit(1);
 }
 
-if (provider === "postgresql" && !process.env.DATABASE_URL) {
-  console.error(
-    [
-      "",
-      "✖ DATABASE_URL is not set — no PostgreSQL database is connected to this deployment.",
-      "  On Vercel: Project → Storage → Create Database → Neon (Postgres) → Connect to this project",
-      "  (enable it for Production and Preview), then Deployments → Redeploy.",
-      "  Elsewhere: set DATABASE_URL=postgresql://user:pass@host:5432/db?sslmode=require",
-      "",
-    ].join("\n"),
-  );
-  process.exit(1);
-}
+const first = (names) => names.find((v) => process.env[v]);
+let urlVar = "DATABASE_URL";
+let directVar;
 
-// Neon via the Vercel integration exposes DATABASE_URL_UNPOOLED; others commonly use DIRECT_URL.
-const directVar = provider === "postgresql" ? ["DATABASE_URL_UNPOOLED", "DIRECT_URL"].find((v) => process.env[v]) : undefined;
+if (provider === "postgresql") {
+  urlVar = first(["DATABASE_URL", "POSTGRES_PRISMA_URL", "POSTGRES_URL"]);
+  directVar = first(["DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING", "DIRECT_URL"]);
+  if (!urlVar) {
+    const seen = Object.keys(process.env).filter((k) => /DATABASE|POSTGRES|PG/.test(k));
+    console.error(
+      [
+        "",
+        "✖ No PostgreSQL connection found (looked for DATABASE_URL, POSTGRES_PRISMA_URL, POSTGRES_URL).",
+        `  Database-related variables present: ${seen.length ? seen.join(", ") : "none"}`,
+        "  On Vercel: Project → Storage → Create Database → Neon (Postgres) → Connect to this project",
+        "  (tick Production and Preview, leave the env-variable prefix empty), then Deployments → Redeploy.",
+        "  Elsewhere: set DATABASE_URL=postgresql://user:pass@host:5432/db?sslmode=require",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+}
 
 const file = new URL("../prisma/schema.prisma", import.meta.url);
 const src = fs.readFileSync(file, "utf8");
 const datasource = [
   "datasource db {",
   `  provider = "${provider}"`,
-  '  url      = env("DATABASE_URL")',
+  `  url      = env("${urlVar}")`,
   ...(directVar ? [`  directUrl = env("${directVar}")`] : []),
   "}",
 ].join("\n");
-const out = src.replace(/datasource db \{[^}]*\}/, datasource);
-fs.writeFileSync(file, out);
-console.log(`Prisma provider set to ${provider}${directVar ? ` (migrations via ${directVar})` : ""}`);
+fs.writeFileSync(file, src.replace(/datasource db \{[^}]*\}/, datasource));
+console.log(`Prisma provider set to ${provider} (url: ${urlVar}${directVar ? `, migrations: ${directVar}` : ""})`);

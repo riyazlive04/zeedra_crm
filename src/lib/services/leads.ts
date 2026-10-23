@@ -25,7 +25,7 @@ export function leadScope(session: Session): Prisma.LeadWhereInput {
 
 // PostgreSQL `contains` is case-sensitive unless mode is set; SQLite is already case-insensitive
 // for ASCII and rejects the `mode` option, so it is only added on Postgres.
-const ci = (process.env.DATABASE_URL ?? "").startsWith("postgres") ? { mode: "insensitive" as const } : {};
+const ci = (process.env.DATABASE_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL ?? "").startsWith("postgres") ? { mode: "insensitive" as const } : {};
 
 /** Translates list filters from the query string into a scoped where-clause. */
 export function leadListWhere(q: URLSearchParams, session: Session): Prisma.LeadWhereInput {
