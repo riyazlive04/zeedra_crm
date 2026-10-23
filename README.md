@@ -62,6 +62,7 @@ Public landing page: `http://localhost:3000/p/zeedra-solar`
 - [Architecture & business design](docs/ARCHITECTURE.md): the sales process, scoring model, sizing maths, GPS validation, automation playbook, security and data model
 - [Integrations](docs/INTEGRATIONS.md): WhatsApp Cloud API, Google Calendar, Claude, lead sources and the scheduler
 - [Deployment](docs/DEPLOYMENT.md): Docker/VPS, Vercel + Postgres, migrations and the go-live checklist
+- [User guides](docs/user-guides/README.md): plain-English, screenshot-led guides for each role (Owner, Admin, Sales Manager, Tele-caller, Field Sales, Installer). The same content is also built into the app under **Help & guide**.
 
 ## Tech
 

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarDays, Smartphone, FileText, MessageCircle, MapPinned, Hammer, Workflow,
-  Calculator, Settings, Bell, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft,
+  Calculator, Settings, Bell, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
 } from "lucide-react";
 import { Avatar } from "./ui";
 import { api } from "@/lib/client";
@@ -24,6 +24,7 @@ export interface NavPerms {
   automations: boolean;
   settings: boolean;
   createLead: boolean;
+  help: boolean;
 }
 
 const NAV: { href: string; label: string; icon: typeof Users; perm: keyof NavPerms; section?: string }[] = [
@@ -40,6 +41,7 @@ const NAV: { href: string; label: string; icon: typeof Users; perm: keyof NavPer
   { href: "/automations", label: "Automations", icon: Workflow, perm: "automations", section: "Workspace" },
   { href: "/calculator", label: "Solar Calculator", icon: Calculator, perm: "leads" },
   { href: "/settings", label: "Settings", icon: Settings, perm: "settings" },
+  { href: "/help", label: "Help & guide", icon: BookOpen, perm: "help", section: "Support" },
 ];
 
 interface Notif {
@@ -276,6 +278,9 @@ export function AppShell({
                   </div>
                   <Link href="/settings?tab=profile" className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50" onClick={() => setMenuOpen(false)}>
                     <UserCircle2 className="h-4 w-4" /> My profile & calendar
+                  </Link>
+                  <Link href="/help" className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50" onClick={() => setMenuOpen(false)}>
+                    <BookOpen className="h-4 w-4" /> Help & guide
                   </Link>
                   <button onClick={logout} className="flex w-full items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50">
                     <LogOut className="h-4 w-4" /> Sign out

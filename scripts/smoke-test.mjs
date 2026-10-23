@@ -71,7 +71,7 @@ async function main() {
   const installer = await new Client().login("installer@zeedra.demo");
 
   section("Every page renders for the owner");
-  const pages = ["/dashboard", "/leads", "/leads/new", "/pipeline", "/appointments", "/tasks", "/whatsapp", "/field", "/quotations", "/tracking", "/projects", "/automations", "/calculator",
+  const pages = ["/dashboard", "/leads", "/leads/new", "/pipeline", "/appointments", "/tasks", "/whatsapp", "/field", "/quotations", "/tracking", "/projects", "/automations", "/calculator", "/help",
     ...["company", "pricing", "qualification", "field", "schedule", "team", "templates", "integrations", "profile"].map((t) => `/settings?tab=${t}`)];
   for (const p of pages) {
     const r = await owner.req(p, { raw: true });

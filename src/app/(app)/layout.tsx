@@ -28,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     automations: can(r, "automations:manage"),
     settings: can(r, "settings:manage"),
     createLead: can(r, "leads:edit"),
+    help: true,
   };
   const trialBanner =
     billing && billing.billingStatus === "TRIALING" && billing.trialDaysLeft !== null && billing.trialDaysLeft <= 5
