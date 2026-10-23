@@ -259,7 +259,7 @@ async function main() {
               ...brand,
               panelCount: sz.panelCount,
               inverterKw: sz.inverterKw,
-              lineItems: buildLineItems(sz, brand, S.bomRates) as unknown as Prisma.InputJsonValue,
+              lineItems: buildLineItems(sz, brand, S) as unknown as Prisma.InputJsonValue,
               subtotal: sz.subtotal,
               gstRate: S.gstRate,
               gstAmount: sz.gstAmount,

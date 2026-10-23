@@ -223,7 +223,7 @@ export async function createQuotation(session: Session, input: QuotationInput) {
       inverterBrand: input.inverterBrand,
       inverterKw: sz.inverterKw,
       structureType: input.structureType || "Hot-dip galvanised elevated",
-      lineItems: buildLineItems(sz, input, s.bomRates) as unknown as Prisma.InputJsonValue,
+      lineItems: buildLineItems(sz, { ...input, phase: lead.phase }, s) as unknown as Prisma.InputJsonValue,
       subtotal: sz.subtotal,
       discount: sz.discount,
       gstRate: s.gstRate,

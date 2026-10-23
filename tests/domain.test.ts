@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS as S, parseSettings } from "@/lib/settings";
-import { centralSubsidy, pickInverterKw, sizeSystem, unitsFromBill } from "@/lib/solar/sizing";
+import { centralSubsidy, inverterPrice, pickInverterKw, sizeSystem, unitsFromBill } from "@/lib/solar/sizing";
 import { emi, loanPlan } from "@/lib/solar/finance";
 import { basicQualification, salesScore } from "@/lib/qualification";
 import { haversineM, validateFieldCapture } from "@/lib/geo";
@@ -70,6 +70,20 @@ describe("system sizing", () => {
     expect(pickInverterKw(3.3)).toBe(3);
     expect(pickInverterKw(5.5)).toBe(5);
     expect(pickInverterKw(10.45)).toBe(10);
+  });
+});
+
+describe("inverter price catalogue", () => {
+  it("looks up an exact size and rounds up to the next cataloged size", () => {
+    expect(inverterPrice(5, "SINGLE", S.inverterPrices)).toBe(25000);
+    expect(inverterPrice(4.5, "SINGLE", S.inverterPrices)).toBe(25000); // no 4.5 kW entry — next size up
+    expect(inverterPrice(6, "THREE", S.inverterPrices)).toBe(36000);
+  });
+  it("extrapolates beyond the largest cataloged size from its ₹/kW rate", () => {
+    expect(inverterPrice(20, "THREE", S.inverterPrices)).toBe(Math.round((62000 / 10) * 20));
+  });
+  it("returns 0 for an empty catalogue", () => {
+    expect(inverterPrice(5, "SINGLE", { singlePhase: [], threePhase: [] })).toBe(0);
   });
 });
 

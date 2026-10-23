@@ -105,6 +105,21 @@ export function pickInverterKw(dcKw: number): number {
   return INVERTER_SIZES.find((x) => x >= target) ?? Math.ceil(target);
 }
 
+/**
+ * Looks up the admin's configured inverter price (Settings → Pricing) for the chosen phase and
+ * kW size: the next cataloged size up if there's no exact match, or — beyond the largest
+ * cataloged size — an extrapolation from its ₹/kW rate.
+ */
+export function inverterPrice(kw: number, phase: string | null | undefined, catalog: OrgSettings["inverterPrices"]): number {
+  const list = phase === "SINGLE" ? catalog.singlePhase : catalog.threePhase;
+  if (list.length === 0) return 0;
+  const sorted = [...list].sort((a, b) => a.kw - b.kw);
+  const next = sorted.find((c) => c.kw >= kw);
+  if (next) return next.price;
+  const largest = sorted[sorted.length - 1];
+  return Math.round((largest.price / largest.kw) * kw);
+}
+
 export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
   const warnings: string[] = [];
   const segment = input.segment ?? "RESIDENTIAL";

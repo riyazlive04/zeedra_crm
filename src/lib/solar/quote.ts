@@ -1,4 +1,4 @@
-import type { SizingResult } from "./sizing";
+import { inverterPrice, type SizingResult } from "./sizing";
 import type { OrgSettings } from "../settings";
 
 export interface LineItem {
@@ -11,17 +11,20 @@ export interface LineItem {
 }
 
 const PANEL_SHARE = 0.52;
+// Used only if the admin hasn't catalogued any inverter prices yet.
 const INVERTER_SHARE = 0.15;
 
 /** Splits the system price into a customer-friendly, itemised bill of materials. */
 export function buildLineItems(
   sz: SizingResult,
-  input: { panelBrand: string; panelWattage: number; inverterBrand: string; structureType?: string },
-  bom: OrgSettings["bomRates"],
+  input: { panelBrand: string; panelWattage: number; inverterBrand: string; structureType?: string; phase?: string | null },
+  s: Pick<OrgSettings, "bomRates" | "inverterPrices">,
 ): LineItem[] {
   const kw = sz.recommendedKw;
+  const bom = s.bomRates;
   const panelAmount = Math.round(sz.subtotal * PANEL_SHARE);
-  const inverterAmount = Math.round(sz.subtotal * INVERTER_SHARE);
+  const catalogued = inverterPrice(sz.inverterKw, input.phase, s.inverterPrices);
+  const inverterAmount = catalogued > 0 ? catalogued : Math.round(sz.subtotal * INVERTER_SHARE);
 
   // Everything below is priced off configurable ₹/kW build rates, then scaled to fit
   // whatever is left of the system price after panels + inverter — so the BOM always

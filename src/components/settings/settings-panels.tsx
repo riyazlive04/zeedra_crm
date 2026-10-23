@@ -243,7 +243,7 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
             </div>
             <div>
               <div className="label">Installation & balance-of-system rates</div>
-              <p className="mb-2 text-xs text-slate-500">Per-kW build costs used to itemise the bill of materials on every proposal. Panels (52%) and inverter (15%) are priced as a share of the system price above; everything below fills the rest, scaled to match.</p>
+              <p className="mb-2 text-xs text-slate-500">Per-kW build costs used to itemise the bill of materials on every proposal. Panels (52%) and the inverter (priced from the catalogue below) come off the system price first; everything here fills the rest, scaled to match.</p>
               <div className="grid gap-4 sm:grid-cols-3">
                 {bomNum("mountingPerKw", "Mounting structure", "/kW")}
                 {bomNum("dcdbPerKw", "DCDB", "/kW")}
@@ -256,6 +256,51 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
                 {bomNum("netMeteringPerKw", "Net-metering & documentation", "/kW")}
                 {bomNum("lightningArrestorEach", "Lightning arrestor", "each")}
                 {bomNum("earthingKitEach", "Earthing kit", "each")}
+              </div>
+            </div>
+            <div>
+              <div className="label">On-grid inverter prices by size</div>
+              <p className="mb-2 text-xs text-slate-500">Set once here, not re-entered per quote. Looked up by the inverter size sizing picks for the system — the next size up if there's no exact match, or extrapolated beyond the largest entry.</p>
+              <div className="grid gap-6 sm:grid-cols-2">
+                {(["singlePhase", "threePhase"] as const).map((phaseKey) => (
+                  <div key={phaseKey}>
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{phaseKey === "singlePhase" ? "Single phase" : "Three phase"}</div>
+                    <div className="space-y-2">
+                      {s.inverterPrices[phaseKey].map((row, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <div className="w-24">
+                            <NumberInput
+                              suffix="kW"
+                              value={row.kw}
+                              onChange={(v) =>
+                                setS((x) => ({ ...x, inverterPrices: { ...x.inverterPrices, [phaseKey]: x.inverterPrices[phaseKey].map((r, j) => (j === i ? { ...r, kw: v ?? 1 } : r)) } }))
+                              }
+                            />
+                          </div>
+                          <div className="w-32">
+                            <NumberInput
+                              prefix="₹"
+                              value={row.price}
+                              onChange={(v) =>
+                                setS((x) => ({ ...x, inverterPrices: { ...x.inverterPrices, [phaseKey]: x.inverterPrices[phaseKey].map((r, j) => (j === i ? { ...r, price: v ?? 0 } : r)) } }))
+                              }
+                            />
+                          </div>
+                          <button
+                            onClick={() => setS((x) => ({ ...x, inverterPrices: { ...x.inverterPrices, [phaseKey]: x.inverterPrices[phaseKey].filter((_, j) => j !== i) } }))}
+                            className="text-slate-400 hover:text-rose-600"
+                            aria-label="Remove size"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <Button size="xs" onClick={() => setS((x) => ({ ...x, inverterPrices: { ...x.inverterPrices, [phaseKey]: [...x.inverterPrices[phaseKey], { kw: 10, price: 0 }] } }))}>
+                        <Plus className="h-3 w-3" /> Add kW size & price
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="grid gap-4 rounded-xl bg-sky-50/60 p-4 sm:grid-cols-3">

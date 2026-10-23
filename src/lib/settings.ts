@@ -54,17 +54,39 @@ export const orgSettingsSchema = z.object({
       earthingKitEach: z.number().min(0),
     })
     .default({
-      mountingPerKw: 6200,
-      dcdbPerKw: 800,
-      acdbPerKw: 800,
-      dcCablePerKw: 1000,
-      acCablePerKw: 1000,
-      miscPerKw: 800,
-      installationPerKw: 3600,
-      transportPerKw: 500,
+      mountingPerKw: 5000,
+      dcdbPerKw: 2000,
+      acdbPerKw: 2000,
+      dcCablePerKw: 2000,
+      acCablePerKw: 2000,
+      miscPerKw: 2000,
+      installationPerKw: 3000,
+      transportPerKw: 1000,
       netMeteringPerKw: 500,
-      lightningArrestorEach: 1200,
-      earthingKitEach: 1500,
+      lightningArrestorEach: 5000,
+      earthingKitEach: 5000,
+    }),
+
+  // On-grid inverter prices by size, one admin-set catalogue for each phase type. Looked up by
+  // the inverter kW the system sizing picks — the next size up if there's no exact match.
+  inverterPrices: z
+    .object({
+      singlePhase: z.array(z.object({ kw: z.number().positive(), price: z.number().min(0) })),
+      threePhase: z.array(z.object({ kw: z.number().positive(), price: z.number().min(0) })),
+    })
+    .default({
+      singlePhase: [
+        { kw: 3, price: 14000 },
+        { kw: 4, price: 17500 },
+        { kw: 5, price: 25000 },
+      ],
+      threePhase: [
+        { kw: 4, price: 22000 },
+        { kw: 5, price: 26000 },
+        { kw: 6, price: 36000 },
+        { kw: 8, price: 46000 },
+        { kw: 10, price: 62000 },
+      ],
     }),
 
   // Subsidy — PM Surya Ghar Muft Bijli Yojana (central) + optional state top-up.
