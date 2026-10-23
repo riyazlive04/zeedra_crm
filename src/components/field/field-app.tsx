@@ -9,7 +9,7 @@ import { Navigation, Phone, Crosshair, FileText, CheckCircle2, MapPin, Clock, Ra
 import { Badge, Button, Card, EmptyState } from "../ui";
 import { TemperatureBadge, VerdictBadge } from "../badges";
 import { Modal } from "../modal";
-import { api, getGpsFix } from "@/lib/client";
+import { api, getGpsFix, reportLocationStatus } from "@/lib/client";
 import { useToast } from "../toast";
 import { formatINR, humanize } from "@/lib/text";
 
@@ -40,6 +40,27 @@ export function FieldApp({ appointments, name }: { appointments: FieldAppt[]; na
     } catch {}
   }, []);
 
+  // Best-effort: log browser location-permission changes (grant/revoke) outside the duty toggle,
+  // e.g. the user flips it in their OS/browser settings while the app is open.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) return;
+    let status: PermissionStatus | null = null;
+    let cancelled = false;
+    const onChange = () => status && reportLocationStatus(status.state === "granted" ? "PERMISSION_GRANTED" : "PERMISSION_DENIED");
+    navigator.permissions
+      .query({ name: "geolocation" as PermissionName })
+      .then((s) => {
+        if (cancelled) return;
+        status = s;
+        s.addEventListener("change", onChange);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      status?.removeEventListener("change", onChange);
+    };
+  }, []);
+
   // Heartbeat while on duty and the app is open (foreground only — battery friendly, privacy respecting).
   useEffect(() => {
     if (!onDuty) return;
@@ -62,6 +83,7 @@ export function FieldApp({ appointments, name }: { appointments: FieldAppt[]; na
     try {
       localStorage.setItem("sf-on-duty", next ? "1" : "0");
     } catch {}
+    reportLocationStatus(next ? "ON_DUTY" : "OFF_DUTY");
     toast.info(next ? "You're on duty" : "Off duty", next ? "Location is shared every 5 minutes while this app is open." : "Location sharing stopped.");
   }
 
@@ -203,19 +225,23 @@ export function FieldApp({ appointments, name }: { appointments: FieldAppt[]; na
   );
 }
 
+const DELIVERABLES = ["Quotation PDF", "Visiting card", "Brochure", "Measurement/photos", "Loan document checklist", "Sample panel"];
+
 function CompleteModal({ appt, onClose }: { appt: FieldAppt | null; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [outcome, setOutcome] = useState("");
+  const [itemsGiven, setItemsGiven] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   async function save(noShow = false) {
     if (!appt) return;
     setSaving(true);
     try {
       if (noShow) await api(`/api/appointments/${appt.id}`, { body: { action: "update", status: "NO_SHOW" } });
-      else await api(`/api/appointments/${appt.id}`, { body: { action: "checkOut", outcome: outcome || null } });
+      else await api(`/api/appointments/${appt.id}`, { body: { action: "checkOut", outcome: outcome || null, itemsGiven } });
       toast.success(noShow ? "Marked as no-show" : "Visit completed");
       setOutcome("");
+      setItemsGiven([]);
       onClose();
       router.refresh();
     } catch (e) {
@@ -223,6 +249,9 @@ function CompleteModal({ appt, onClose }: { appt: FieldAppt | null; onClose: () 
     } finally {
       setSaving(false);
     }
+  }
+  function toggleItem(item: string) {
+    setItemsGiven((cur) => (cur.includes(item) ? cur.filter((i) => i !== item) : [...cur, item]));
   }
   return (
     <Modal
@@ -246,6 +275,22 @@ function CompleteModal({ appt, onClose }: { appt: FieldAppt | null; onClose: () 
         {["Roof OK — quotation shared", "Needs family discussion", "Loan documents collected", "Roof needs repair first", "Shading issue — resize"].map((s) => (
           <button key={s} type="button" onClick={() => setOutcome((o) => (o ? `${o}. ${s}` : s))} className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:border-sun-400">
             {s}
+          </button>
+        ))}
+      </div>
+      <label className="label mt-4">Given to customer</label>
+      <div className="flex flex-wrap gap-1.5">
+        {DELIVERABLES.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => toggleItem(item)}
+            className={clsx(
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+              itemsGiven.includes(item) ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:border-sun-400",
+            )}
+          >
+            {itemsGiven.includes(item) ? "✓ " : ""}{item}
           </button>
         ))}
       </div>

@@ -15,7 +15,11 @@ const schema = z.discriminatedUnion("action", [
     type: z.enum(APPT_TYPES).optional(),
   }),
   z.object({ action: z.literal("checkIn"), capture: captureSchema }),
-  z.object({ action: z.literal("checkOut"), outcome: z.string().max(2000).nullable().optional() }),
+  z.object({
+    action: z.literal("checkOut"),
+    outcome: z.string().max(2000).nullable().optional(),
+    itemsGiven: z.array(z.string().min(1).max(80)).max(20).optional(),
+  }),
 ]);
 
 export const POST = route<{ id: string }>("appointments:manage", async ({ req, session, params }) => {
@@ -29,6 +33,6 @@ export const POST = route<{ id: string }>("appointments:manage", async ({ req, s
     case "checkIn":
       return checkIn(session, params.id, body.capture);
     case "checkOut":
-      return checkOut(session, params.id, body.outcome ?? null);
+      return checkOut(session, params.id, body.outcome ?? null, body.itemsGiven ?? []);
   }
 });

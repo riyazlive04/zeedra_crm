@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { orgSettings } from "@/lib/api";
 import { PageHeader, StatCard } from "@/components/ui";
 import { TrackingBoard } from "@/components/field/tracking-board";
+import { DutyHistory } from "@/components/field/duty-history";
+import { dutyHistory } from "@/lib/services/duty";
 import { ShieldCheck, ShieldAlert, MapPinned, Users } from "lucide-react";
 
 export const metadata = { title: "Field Tracking" };
@@ -14,7 +16,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
   const startToday = new Date();
   startToday.setHours(0, 0, 0, 0);
 
-  const [users, pings, quotes, checkIns, settings] = await Promise.all([
+  const [users, pings, quotes, checkIns, settings, duty] = await Promise.all([
     db.user.findMany({ where: { organizationId: session.orgId, active: true, role: "FIELD_SALES" }, select: { id: true, name: true, avatarColor: true, territory: true }, orderBy: { name: "asc" } }),
     db.locationPing.findMany({
       where: { organizationId: session.orgId, createdAt: { gte: new Date(Date.now() - 24 * 3_600_000) } },
@@ -33,6 +35,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
     }),
     db.appointment.count({ where: { organizationId: session.orgId, checkInAt: { gte: startToday } } }),
     orgSettings(session.orgId),
+    dutyHistory(session.orgId, { days: 1 }),
   ]);
 
   const team = users.map((u) => {
@@ -65,6 +68,9 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
         geofenceM={settings.geofenceRadiusM}
         quotes={quotes.map((q) => ({ ...q, serverTime: q.serverTime.toISOString() }))}
       />
+      <div className="mt-6">
+        <DutyHistory initial={duty.summary} />
+      </div>
     </div>
   );
 }

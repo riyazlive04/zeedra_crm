@@ -43,6 +43,7 @@ model Organization {
   tasks         Task[]
   projects      Project[]
   pings         LocationPing[]
+  locationStatusEvents LocationStatusEvent[]
   auditLogs     AuditLog[]
   notifications Notification[]
   counters      Counter[]
@@ -84,6 +85,7 @@ model User {
   activities       Activity[]
   tasks            Task[]
   pings            LocationPing[]
+  locationStatusEvents LocationStatusEvent[]
   notifications    Notification[]
   projectsManaged  Project[]
 
@@ -369,6 +371,7 @@ model Appointment {
   checkInDistanceM Float?
   checkInVerdict  String? // VERIFIED | OUT_OF_RANGE | LOW_ACCURACY | ...
   checkOutAt      DateTime?
+  itemsGiven      Json? // what was handed to the customer at this visit — e.g. ["Quotation PDF", "Brochure"]
   reminder24Sent  Boolean @default(false)
   reminder2Sent   Boolean @default(false)
   createdAt       DateTime @default(now())
@@ -489,6 +492,22 @@ model LocationPing {
   refId          String?
   deviceTime     DateTime?
   createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, createdAt])
+}
+
+// Tracks when a field rep's location sharing was switched on/off, and when the browser's
+// location permission was granted/denied — so "why no pings?" can be answered after the fact.
+model LocationStatusEvent {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  type           String // ON_DUTY | OFF_DUTY | PERMISSION_GRANTED | PERMISSION_DENIED
+  deviceTime     DateTime?
+  createdAt      DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)

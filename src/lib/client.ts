@@ -31,6 +31,11 @@ export async function api<T = unknown>(url: string, opts: { method?: string; bod
   return data as T;
 }
 
+/** Fire-and-forget log of a duty toggle or location-permission change, for the manager's tracking report. */
+export function reportLocationStatus(type: "ON_DUTY" | "OFF_DUTY" | "PERMISSION_GRANTED" | "PERMISSION_DENIED") {
+  api("/api/tracking/status", { body: { type, deviceTime: new Date().toISOString() } }).catch(() => {});
+}
+
 export interface GeoFix {
   lat: number;
   lng: number;
@@ -56,6 +61,7 @@ export function getGpsFix(targetAccuracy = 30, timeoutMs = 20000): Promise<GeoFi
       (err) => {
         navigator.geolocation.clearWatch(watch);
         clearTimeout(timer);
+        if (err.code === err.PERMISSION_DENIED) reportLocationStatus("PERMISSION_DENIED");
         reject(
           new Error(
             err.code === err.PERMISSION_DENIED

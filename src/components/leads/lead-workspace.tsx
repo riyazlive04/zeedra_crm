@@ -717,8 +717,17 @@ function VisitsAndQuotes({ lead, onBook, quoteHref, canQuote }: { lead: Lead; on
                     {humanize(a.type)} · {format(new Date(a.startAt), "EEE d MMM, h:mm a")}
                   </div>
                   <div className="text-xs text-slate-500">
-                    {a.assignedTo?.name} {a.outcome && `· ${a.outcome}`}
+                    {a.assignedTo?.name}
+                    {a.checkInAt && ` · visited ${format(new Date(a.checkInAt), "h:mm a")}`}
+                    {a.outcome && ` · ${a.outcome}`}
                   </div>
+                  {Array.isArray(a.itemsGiven) && a.itemsGiven.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {a.itemsGiven.map((item: string) => (
+                        <Badge key={item} tone="slate">Gave: {item}</Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {a.checkInVerdict && <VerdictBadge value={a.checkInVerdict} />}
                 <Badge tone={a.status === "COMPLETED" ? "green" : a.status === "CANCELLED" || a.status === "NO_SHOW" ? "rose" : a.status === "CHECKED_IN" ? "sky" : "slate"}>{humanize(a.status)}</Badge>
