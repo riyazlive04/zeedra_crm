@@ -1,4 +1,4 @@
-# Sirah × Zeedra Solar — Architecture & Business Design
+# Zeedra Solar — Architecture & Business Design
 
 *Solar CRM SaaS by Sirah Digital in collaboration with Zeedra Digital.*
 
@@ -182,7 +182,11 @@ See `prisma/schema.prisma`. Indexes cover the hot paths: leads by stage, tempera
 | Scheduler not running | Event automations still fire; only reminders, nudges and expiry wait |
 | Automation action fails | Recorded in `AutomationRun` and shown on the rule card; the user's action still succeeds |
 
-### 2.6 Scaling path
+### 2.6 SaaS: plans, trial & billing
+
+`src/lib/billing/plans.ts` is the single source of truth for the three plans (Starter, Growth, Scale), read by the public pricing page, the Settings → Billing panel and the seat-limit check on `POST /api/users`. New workspaces (`provisionOrganization`) start on a 14-day trial (`Organization.billingStatus = "TRIALING"`, `trialEndsAt`). The app shell shows a banner once a trial has 5 days or fewer left, or after it expires; past expiry, new seats beyond the Starter limit are blocked with a 402 until the owner picks a plan. Lead volume is shown as a usage meter but never blocks lead capture — the public lead-capture funnel must never silently drop a lead. No payment gateway is wired yet: choosing a plan in Settings → Billing (owner-only) records `plan`/`billingStatus` directly, and billing follow-up is manual (see `docs/DEPLOYMENT.md`).
+
+### 2.7 Scaling path
 
 - Stateless app servers scale horizontally (sessions are JWT; the rate limiter lives in the DB).
 - Move the cron to a queue worker (BullMQ/SQS) when tenants exceed a few thousand appointments a day.

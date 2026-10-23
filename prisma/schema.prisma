@@ -1,4 +1,4 @@
-// Sirah × Zeedra Solar — Solar CRM data model
+// Zeedra Solar — Solar CRM data model
 // Multi-tenant: every business row carries organizationId and every query is scoped by it.
 // Dev uses SQLite; switch `provider` to "postgresql" for production (see docs/DEPLOYMENT.md).
 
@@ -22,7 +22,10 @@ model Organization {
   address   String?
   gstin     String?
   logoUrl   String?
-  plan      String   @default("GROWTH") // STARTER | GROWTH | ENTERPRISE
+  plan            String    @default("GROWTH") // STARTER | GROWTH | SCALE — see src/lib/billing/plans.ts
+  billingStatus   String    @default("TRIALING") // TRIALING | ACTIVE | CANCELED
+  trialEndsAt     DateTime?
+  subscribedAt    DateTime?
   apiKey    String   @unique // lead-capture webhook key (x-api-key)
   settings  Json // OrgSettings — pricing, tariff, subsidy, geofence, qualification thresholds
   // WhatsApp Cloud API credentials (per tenant)

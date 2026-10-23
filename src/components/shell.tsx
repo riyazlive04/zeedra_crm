@@ -56,12 +56,14 @@ export function AppShell({
   orgName,
   perms,
   unread: initialUnread,
+  trialBanner,
   children,
 }: {
   user: { name: string; email: string; role: string; avatarColor: string; roleLabel: string };
   orgName: string;
   perms: NavPerms;
   unread: number;
+  trialBanner?: { tone: "ending" | "expired"; text: string } | null;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -283,6 +285,17 @@ export function AppShell({
             </div>
           </div>
         </header>
+        {trialBanner && (
+          <Link
+            href="/settings?tab=billing"
+            className={clsx(
+              "no-print flex items-center justify-center gap-2 px-4 py-2 text-center text-xs font-medium",
+              trialBanner.tone === "expired" ? "bg-rose-600 text-white hover:bg-rose-700" : "bg-amber-400 text-ink-950 hover:bg-amber-300",
+            )}
+          >
+            {trialBanner.text}
+          </Link>
+        )}
         <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>

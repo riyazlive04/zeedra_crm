@@ -1,8 +1,8 @@
-# ☀️ Sirah × Zeedra Solar: AI-powered CRM for solar installers
+# ☀️ Zeedra Solar: AI-powered CRM for solar installers
 
 **Built by Sirah Digital in collaboration with Zeedra Digital.**
 
-Sirah × Zeedra Solar runs the whole rooftop-solar sales cycle for Indian EPCs, from the first enquiry to the PM Surya Ghar subsidy credit:
+Zeedra Solar runs the whole rooftop-solar sales cycle for Indian EPCs, from the first enquiry to the PM Surya Ghar subsidy credit:
 
 - **Every lead, every channel.** Website landing page, API (Facebook Lead Ads, IndiaMART, JustDial), WhatsApp inbound and CSV import. Duplicates are merged and new leads are auto-assigned round-robin.
 - **Two-stage qualification.** *Basic* (EB bill and property ownership, plus roof checks) and *Sales* (site-visit readiness, installation timeline, finance), producing an explainable Hot / Warm / Cold score with the next best action.
@@ -14,6 +14,13 @@ Sirah × Zeedra Solar runs the whole rooftop-solar sales cycle for Indian EPCs, 
 - **Professional proposals.** A server-priced bill of materials, a 25-year savings view and a secure customer link with view tracking.
 - **Installations.** Booking → PM Surya Ghar portal → DISCOM feasibility → installation → net-meter → commissioning → subsidy, with a document checklist and payment tracking.
 - **AI co-pilot** (Claude). Lead coaching, reply drafting and a daily manager brief. Every AI feature has a rule-based fallback.
+- **Self-serve SaaS.** Public marketing site and pricing page, 14-day free trial with no card required, plan-based seat/lead limits, and a Settings → Billing panel the workspace owner manages themselves (`src/lib/billing/plans.ts`).
+
+## Go-to-market
+
+- `/` — public marketing homepage (feature tour + an honest comparison against Arka360 and Solar Ladder).
+- `/pricing` — self-serve plans (Starter / Growth / Scale + Enterprise), monthly/yearly toggle.
+- `/register` — creates a workspace and starts the trial; no payment gateway is wired yet, so "upgrading" in Settings → Billing records the chosen plan and our team follows up to collect payment (see `docs/DEPLOYMENT.md`).
 
 ## Quick start (local)
 
@@ -43,7 +50,7 @@ Public landing page: `http://localhost:3000/p/zeedra-solar`
 | Command | What it does |
 |---|---|
 | `npm run dev` / `build` / `start` | Next.js |
-| `npm test` | 44 unit tests: sizing, subsidy, EMI, qualification, scoring, GPS validation, scheduling, automations |
+| `npm test` | 53 unit tests: sizing, subsidy, EMI, qualification, scoring, GPS validation, scheduling, automations, billing plans |
 | `npm run test:e2e` | 116-check end-to-end suite against a running server (all roles, full lead → project flow, RBAC, tenant isolation, webhooks, cron) |
 | `npm run test:ui` | Real-browser check (Playwright) of every page on desktop and mobile; fails on console errors, hydration mismatches or horizontal overflow; saves screenshots |
 | `npm run typecheck` | `tsc --noEmit` |

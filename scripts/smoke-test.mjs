@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * End-to-end smoke test against a running Sirah × Zeedra Solar server with the demo seed loaded.
+ * End-to-end smoke test against a running Zeedra Solar server with the demo seed loaded.
  *   npm run db:reset && npm run build && npm start   (in another terminal)
  *   BASE_URL=http://localhost:3000 CRON_SECRET=... npm run test:e2e
  */
@@ -52,7 +52,7 @@ const near = (lat, lng, m) => ({ lat: lat + m / 111_320, lng });
 const rndPhone = () => `9${Math.floor(100000000 + Math.random() * 899999999)}`;
 
 async function main() {
-  console.log(`Sirah × Zeedra Solar smoke test → ${BASE}`);
+  console.log(`Zeedra Solar smoke test → ${BASE}`);
 
   section("Platform");
   const anon = new Client();
@@ -99,14 +99,14 @@ async function main() {
   check("lead code assigned", /^LD-\d{5}$/.test(lead?.code ?? ""), lead?.code);
   check("basic qualification passes (bill + ownership)", lead?.basicQualified === true && lead?.stage === "QUALIFIED", { q: lead?.basicQualified, s: lead?.stage });
   check("system auto-sized from EB bill (~3.3 kW)", lead?.recommendedKw > 2.5 && lead?.recommendedKw < 4, lead?.recommendedKw);
-  check("PM Surya Ghar subsidy computed (₹78,000)", lead?.subsidyAmount === 78000, lead?.subsidyAmount);
+  check("PM Surya Ghar + TN state subsidy computed (₹1,00,000)", lead?.subsidyAmount === 100000, lead?.subsidyAmount);
   check("auto-assigned to a tele-caller", !!lead?.assignedToId);
   const msgs = await tele.req(`/api/leads/${lead.id}/messages`);
   const keys = (msgs.data ?? []).map((m) => m.templateKey);
   check("WhatsApp welcome sent by automation", keys.includes("welcome"), keys);
   check("WhatsApp instant estimate sent on qualification", keys.includes("proposal_estimate"), keys);
   const est = (msgs.data ?? []).find((m) => m.templateKey === "proposal_estimate");
-  check("estimate message has system size & subsidy filled in", !!est && est.body.includes("kW") && est.body.includes("78,000") && !est.body.includes("{{"), est?.body?.slice(0, 120));
+  check("estimate message has system size & subsidy filled in", !!est && est.body.includes("kW") && est.body.includes("1,00,000") && !est.body.includes("{{"), est?.body?.slice(0, 120));
 
   const dup = await tele.req("/api/leads", { method: "POST", body: { name: "Same Person", phone: `+91 ${phone}`, source: "FACEBOOK" } });
   check("duplicate phone merges into existing lead", dup.status === 200 && dup.data.duplicate === true && dup.data.lead.id === lead.id, dup.data);

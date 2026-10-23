@@ -1,6 +1,6 @@
 # Deployment
 
-Sirah × Zeedra Solar is a single Next.js application plus a PostgreSQL database. Choose one option below.
+Zeedra Solar is a single Next.js application plus a PostgreSQL database. Choose one option below.
 
 ## Required environment
 
@@ -48,6 +48,7 @@ SQLite is for local development only. It does not work on Vercel.
 - [ ] Each salesperson connects Google Calendar from their profile
 - [ ] The scheduler is calling `/api/cron/run` (check the "Ran N times" counter on reminder automations)
 - [ ] Back up Postgres daily (e.g. `pg_dump` cron, or managed backups)
+- [ ] Billing: no payment gateway is wired yet. Settings → Billing lets an owner self-select a plan (`Organization.plan`/`billingStatus`); wire Razorpay Subscriptions (or similar) before relying on it to actually collect payment, and until then follow up on new "upgrades" manually
 
 ## Operations
 

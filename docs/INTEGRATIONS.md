@@ -6,13 +6,13 @@ Every integration is optional, and the CRM works fully without them. Configure t
 
 1. Create a Meta Business account and a **WhatsApp Business** app at developers.facebook.com, and add a phone number.
 2. Create a **System User** with the `whatsapp_business_messaging` and `whatsapp_business_management` permissions, then generate a **permanent token**.
-3. In Sirah × Zeedra Solar, go to **Settings → Integrations → WhatsApp** and enter the *Phone number ID*, *WhatsApp Business Account ID* and the token.
+3. In Zeedra Solar, go to **Settings → Integrations → WhatsApp** and enter the *Phone number ID*, *WhatsApp Business Account ID* and the token.
 4. Webhook (Meta app → WhatsApp → Configuration):
    - Callback URL: `https://YOUR_DOMAIN/api/webhooks/whatsapp`
    - Verify token: the value of `WHATSAPP_VERIFY_TOKEN` in your environment
    - Subscribe to `messages`
    - Recommended: set `WHATSAPP_APP_SECRET` so payload signatures are verified.
-5. **Templates outside the 24-hour window.** Meta only lets you start a conversation with an *approved template*. For each Sirah × Zeedra Solar template you use in automations (`welcome`, `appointment_reminder`, `followup_nudge` …), create a matching template in WhatsApp Manager, then enter its name in **Settings → WhatsApp templates → Approved Meta template name**. The variables (`{{name}}`, `{{kw}}` …) are sent as body parameters in the order they appear in the Sirah × Zeedra Solar text, so write the Meta template with `{{1}}`, `{{2}}`… in the same order.
+5. **Templates outside the 24-hour window.** Meta only lets you start a conversation with an *approved template*. For each Zeedra Solar template you use in automations (`welcome`, `appointment_reminder`, `followup_nudge` …), create a matching template in WhatsApp Manager, then enter its name in **Settings → WhatsApp templates → Approved Meta template name**. The variables (`{{name}}`, `{{kw}}` …) are sent as body parameters in the order they appear in the Zeedra Solar text, so write the Meta template with `{{1}}`, `{{2}}`… in the same order.
 
 Inbound messages from unknown numbers create leads automatically (source = WhatsApp). Delivery and read receipts update message ticks.
 

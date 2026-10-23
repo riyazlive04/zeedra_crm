@@ -3,6 +3,7 @@ import { Sun, Leaf, Landmark, TrendingUp, ShieldCheck } from "lucide-react";
 import type { LineItem } from "@/lib/solar/quote";
 import { formatINR, formatNumber, displayPhone } from "@/lib/text";
 import { BRAND } from "@/lib/brand";
+import { PanelLayoutPreview } from "@/components/solar/panel-layout";
 
 export interface ProposalData {
   number: string;
@@ -112,6 +113,9 @@ export function ProposalDocument({ q, escalationPct = 3, degradationPct = 0.5 }:
             <Spec label="Solar modules" value={`${q.panelCount} × ${q.panelWattage} Wp ${q.panelBrand}`} sub={q.panelType} />
             <Spec label="Inverter" value={`${q.inverterKw} kW ${q.inverterBrand}`} sub={q.inverterType} />
             <Spec label="Structure" value={q.structureType} sub={`~${formatNumber(q.annualGenerationKwh)} kWh/year generation`} />
+          </div>
+          <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+            <PanelLayoutPreview panelCount={q.panelCount} panelWattage={q.panelWattage} systemKw={q.systemKw} />
           </div>
           <table className="w-full text-sm">
             <thead className="table-head">

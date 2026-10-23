@@ -3,6 +3,7 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { DEFAULT_RULES, DEFAULT_TEMPLATES } from "../defaults";
 import { DEFAULT_SETTINGS, type OrgSettings } from "../settings";
+import { TRIAL_DAYS } from "../billing/plans";
 
 export function generateApiKey() {
   return `sf_live_${crypto.randomBytes(24).toString("base64url")}`;
@@ -35,6 +36,8 @@ export async function provisionOrganization(
         email: input.email,
         apiKey: generateApiKey(),
         settings: { ...DEFAULT_SETTINGS, ...(input.settings ?? {}) } as unknown as Prisma.InputJsonValue,
+        billingStatus: "TRIALING",
+        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
       },
     });
     const owner = await tx.user.create({

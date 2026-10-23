@@ -6,6 +6,7 @@ import { ROLES } from "@/lib/validators";
 import { ApiError } from "@/lib/errors";
 import { audit } from "@/lib/activity";
 import { normalizePhone } from "@/lib/text";
+import { seatLimitReached } from "@/lib/billing/plans";
 
 const COLORS = ["#22c55e", "#3b82f6", "#f97316", "#ec4899", "#14b8a6", "#a855f7", "#eab308", "#ef4444", "#6366f1"];
 
@@ -29,7 +30,9 @@ const createSchema = z.object({
 export const POST = route("users:manage", async ({ req, session }) => {
   const body = await parseBody(req, createSchema);
   if (await db.user.findUnique({ where: { email: body.email } })) throw new ApiError(409, "A user with this email already exists");
-  const count = await db.user.count({ where: { organizationId: session.orgId } });
+  const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { plan: true, billingStatus: true, trialEndsAt: true } });
+  const count = await db.user.count({ where: { organizationId: session.orgId, active: true } });
+  if (seatLimitReached(org, count)) throw new ApiError(402, "You've reached your plan's team member limit. Upgrade in Settings → Billing to add more.");
   const user = await db.user.create({
     data: {
       organizationId: session.orgId,

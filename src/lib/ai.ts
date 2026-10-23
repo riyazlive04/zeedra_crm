@@ -18,7 +18,7 @@ function getClient(): Anthropic {
   return client;
 }
 
-const SYSTEM = `You are the AI sales co-pilot inside Sirah × Zeedra Solar, a CRM used by Indian rooftop-solar installation companies (EPCs).
+const SYSTEM = `You are the AI sales co-pilot inside Zeedra Solar, a CRM used by Indian rooftop-solar installation companies (EPCs).
 You know the residential and C&I solar sales cycle in India: electricity (EB) bill analysis, DISCOM net-metering, sanctioned load,
 PM Surya Ghar Muft Bijli Yojana subsidy (₹30,000/kW for the first 2 kW, ₹18,000 for the 3rd kW, max ₹78,000; housing societies ₹18,000/kW),
 collateral-free solar loans (~7% p.a.), DCR panels, on-grid inverters, site surveys, and typical customer objections.

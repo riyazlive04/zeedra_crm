@@ -8,7 +8,7 @@ import { aiEnabled } from "@/lib/ai";
 import { googleConfigured } from "@/lib/google-calendar";
 import { PageHeader } from "@/components/ui";
 import { BRAND } from "@/lib/brand";
-import { CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel, WorkflowPanel } from "@/components/settings/settings-panels";
+import { BillingPanel, CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel, WorkflowPanel } from "@/components/settings/settings-panels";
 
 export const metadata = { title: "Settings" };
 
@@ -22,6 +22,7 @@ const TABS = [
   ["team", "Team"],
   ["templates", "WhatsApp templates"],
   ["integrations", "Integrations"],
+  ["billing", "Billing & plan"],
   ["profile", "My profile"],
 ] as const;
 
@@ -29,7 +30,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const session = await requirePageSession();
   const sp = await searchParams;
   const admin = can(session.role, "settings:manage");
-  const tabs = admin ? TABS : TABS.filter(([k]) => k === "profile");
+  const isOwner = session.role === "OWNER";
+  const tabs = admin ? TABS.filter(([k]) => k !== "billing" || isOwner) : TABS.filter(([k]) => k === "profile");
   const tab = tabs.find(([k]) => k === sp.tab)?.[0] ?? (admin ? (sp.google ? "integrations" : "company") : "profile");
 
   const [org, me] = await Promise.all([
@@ -84,6 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               googleStatus={sp.google}
             />
           )}
+          {tab === "billing" && <BillingPanel />}
           {tab === "profile" && <ProfilePanel user={me} googleOAuth={googleConfigured()} />}
         </div>
       </div>

@@ -17,7 +17,7 @@ const PLAN = [
     user: "owner@zeedra.demo",
     viewport: { width: 1440, height: 900 },
     tag: "desktop",
-    pages: ["/dashboard", "/leads", "/leads/new", "/pipeline", "/appointments", "/whatsapp", "/quotations", "/tracking", "/projects", "/automations", "/calculator", "/settings?tab=pricing", "/settings?tab=integrations", "/tasks"],
+    pages: ["/dashboard", "/leads", "/leads/new", "/pipeline", "/appointments", "/whatsapp", "/quotations", "/tracking", "/projects", "/automations", "/calculator", "/settings?tab=pricing", "/settings?tab=integrations", "/settings?tab=billing", "/tasks"],
   },
   { user: "field@zeedra.demo", viewport: { width: 390, height: 844 }, tag: "mobile", pages: ["/field", "/leads", "/dashboard"] },
 ];

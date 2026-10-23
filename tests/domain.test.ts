@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS as S, parseSettings } from "@/lib/settings";
 import { centralSubsidy, inverterPrice, pickInverterKw, sizeSystem, unitsFromBill } from "@/lib/solar/sizing";
 import { emi, loanPlan } from "@/lib/solar/finance";
+import { panelGrid } from "@/lib/solar/layout";
 import { basicQualification, salesScore } from "@/lib/qualification";
 import { haversineM, validateFieldCapture } from "@/lib/geo";
 import { normalizePhone, parseCSV, renderTemplate, formatINRCompact } from "@/lib/text";
+import { billingState, seatLimitReached, PLANS } from "@/lib/billing/plans";
 
 describe("subsidy (PM Surya Ghar)", () => {
   it("pays 30k/kW for first 2 kW, 18k for 3rd, capped at 78k", () => {
@@ -259,5 +261,44 @@ describe("text utils", () => {
     const s = parseSettings({ tariffPerUnit: "bad", geofenceRadiusM: 300 });
     expect(s.tariffPerUnit).toBe(S.tariffPerUnit);
     expect(s.geofenceRadiusM).toBe(300);
+  });
+});
+
+describe("panel layout (schematic)", () => {
+  it("returns an empty grid for zero or negative panels", () => {
+    expect(panelGrid(0)).toEqual({ rows: 0, cols: 0, panelCount: 0, totalCells: 0 });
+    expect(panelGrid(-3).panelCount).toBe(0);
+  });
+  it("fits every panel inside the grid, wider than tall", () => {
+    for (const n of [1, 6, 12, 23, 60]) {
+      const g = panelGrid(n);
+      expect(g.totalCells).toBeGreaterThanOrEqual(n);
+      expect(g.totalCells - g.rows * g.cols).toBe(0);
+      expect(g.cols).toBeGreaterThanOrEqual(g.rows);
+    }
+  });
+});
+
+describe("billing plans", () => {
+  it("treats a non-expired trial as full access regardless of seats", () => {
+    const org = { plan: "STARTER", billingStatus: "TRIALING", trialEndsAt: new Date(Date.now() + 86_400_000) };
+    expect(seatLimitReached(org, 50)).toBe(false);
+  });
+  it("blocks new seats past the plan limit once the trial has ended", () => {
+    const org = { plan: "STARTER", billingStatus: "TRIALING", trialEndsAt: new Date(Date.now() - 1000) };
+    expect(seatLimitReached(org, PLANS.STARTER.seatLimit!)).toBe(true);
+    expect(seatLimitReached(org, PLANS.STARTER.seatLimit! - 1)).toBe(false);
+  });
+  it("never blocks an unlimited-seat plan", () => {
+    const org = { plan: "SCALE", billingStatus: "ACTIVE", trialEndsAt: null };
+    expect(seatLimitReached(org, 10_000)).toBe(false);
+  });
+  it("reports days left in trial, falling to 0 once expired", () => {
+    const active = billingState({ plan: "GROWTH", billingStatus: "TRIALING", trialEndsAt: new Date(Date.now() + 3 * 86_400_000) });
+    expect(active.trialDaysLeft).toBeGreaterThanOrEqual(2);
+    expect(active.trialExpired).toBe(false);
+    const expired = billingState({ plan: "GROWTH", billingStatus: "TRIALING", trialEndsAt: new Date(Date.now() - 1000) });
+    expect(expired.trialExpired).toBe(true);
+    expect(expired.trialDaysLeft).toBe(0);
   });
 });

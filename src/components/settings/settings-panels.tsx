@@ -4,8 +4,8 @@ import { TimeAgo } from "../time-ago";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { Plus, Trash2, Copy, RefreshCw, CheckCircle2, XCircle, CalendarDays, MessageCircle, Sparkles, KeyRound, Globe, Clock } from "lucide-react";
-import { Avatar, Badge, Button, Card, CardHeader, Field } from "../ui";
+import { Plus, Trash2, Copy, RefreshCw, CheckCircle2, XCircle, CalendarDays, MessageCircle, Sparkles, KeyRound, Globe, Clock, CreditCard, Check } from "lucide-react";
+import { Avatar, Badge, Button, Card, CardHeader, Field, ProgressBar } from "../ui";
 import { Modal } from "../modal";
 import { NumberInput, Segmented, YesNo } from "../form-controls";
 import { api } from "@/lib/client";
@@ -14,7 +14,9 @@ import type { OrgSettings } from "@/lib/settings";
 import { ROLE_LABEL } from "@/lib/rbac";
 import { ROLES } from "@/lib/validators";
 import { PROJECT_STAGES } from "@/lib/defaults";
-import { humanize, templateVariables, renderTemplate } from "@/lib/text";
+import { humanize, templateVariables, renderTemplate, formatINR } from "@/lib/text";
+import { useEffect } from "react";
+import type { PlanDef } from "@/lib/billing/plans";
 
 function useSaver() {
   const router = useRouter();
@@ -948,6 +950,140 @@ export function ProfilePanel({ user, googleOAuth }: { user: { id: string; name: 
           </Button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+/* ── Billing ──────────────────────────────────────────────────────────── */
+
+interface BillingInfo {
+  plan: PlanDef;
+  billingStatus: "TRIALING" | "ACTIVE" | "CANCELED";
+  trialDaysLeft: number | null;
+  trialExpired: boolean;
+  usage: { seats: number; seatLimit: number | null; leadsThisMonth: number; leadLimitMonthly: number | null };
+  plans: PlanDef[];
+}
+
+export function BillingPanel() {
+  const [info, setInfo] = useState<BillingInfo | null>(null);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const toast = useToast();
+  const router = useRouter();
+
+  useEffect(() => {
+    api<BillingInfo>("/api/billing").then(setInfo).catch((e) => toast.error("Could not load billing", e instanceof Error ? e.message : undefined));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function choose(planId: string) {
+    setBusyPlan(planId);
+    try {
+      await api("/api/billing", { method: "POST", body: { plan: planId } });
+      toast.success(`Moved to the ${planId[0]}${planId.slice(1).toLowerCase()} plan`, "Our team will follow up within one business day to set up billing.");
+      const fresh = await api<BillingInfo>("/api/billing");
+      setInfo(fresh);
+      router.refresh();
+    } catch (e) {
+      toast.error("Could not change plan", e instanceof Error ? e.message : undefined);
+    } finally {
+      setBusyPlan(null);
+    }
+  }
+
+  if (!info) return <Card className="p-10 text-center text-sm text-slate-500">Loading billing…</Card>;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader title="Current plan" subtitle="Manage your subscription" icon={<CreditCard className="h-4 w-4" />} />
+        <div className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-display text-xl font-bold text-slate-900">{info.plan.name}</span>
+              {info.billingStatus === "TRIALING" && !info.trialExpired && <Badge tone="blue">Trial · {info.trialDaysLeft} day{info.trialDaysLeft === 1 ? "" : "s"} left</Badge>}
+              {info.billingStatus === "TRIALING" && info.trialExpired && <Badge tone="amber">Trial ended</Badge>}
+              {info.billingStatus === "ACTIVE" && <Badge tone="green">Active</Badge>}
+              {info.billingStatus === "CANCELED" && <Badge tone="red">Canceled</Badge>}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              {formatINR(info.plan.priceMonthly)}/month + GST ({formatINR(info.plan.priceYearly)}/year + GST)
+            </p>
+          </div>
+          {info.billingStatus !== "CANCELED" && (
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                if (!confirm("Cancel your subscription? Your workspace stays accessible, but you'll lose access to plan features beyond Starter limits.")) return;
+                await api("/api/billing", { method: "DELETE", body: { cancel: true } });
+                toast.success("Subscription canceled");
+                setInfo(await api<BillingInfo>("/api/billing"));
+                router.refresh();
+              }}
+            >
+              Cancel plan
+            </Button>
+          )}
+        </div>
+        <div className="grid gap-4 border-t border-slate-100 p-5 sm:grid-cols-2">
+          <div>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-600">Team members</span>
+              <span className="text-slate-500">
+                {info.usage.seats}
+                {info.usage.seatLimit ? ` / ${info.usage.seatLimit}` : " (unlimited)"}
+              </span>
+            </div>
+            <ProgressBar value={info.usage.seatLimit ? (info.usage.seats / info.usage.seatLimit) * 100 : 0} tone={info.usage.seatLimit && info.usage.seats >= info.usage.seatLimit ? "red" : "sun"} />
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-600">Leads this month</span>
+              <span className="text-slate-500">
+                {info.usage.leadsThisMonth}
+                {info.usage.leadLimitMonthly ? ` / ${info.usage.leadLimitMonthly}` : " (unlimited)"}
+              </span>
+            </div>
+            <ProgressBar
+              value={info.usage.leadLimitMonthly ? (info.usage.leadsThisMonth / info.usage.leadLimitMonthly) * 100 : 0}
+              tone={info.usage.leadLimitMonthly && info.usage.leadsThisMonth >= info.usage.leadLimitMonthly ? "red" : "sun"}
+            />
+          </div>
+        </div>
+      </Card>
+
+      <div>
+        <h3 className="mb-3 font-display text-sm font-bold text-slate-900">Change plan</h3>
+        <div className="grid gap-4 md:grid-cols-3">
+          {info.plans.map((p) => {
+            const current = p.id === info.plan.id && info.billingStatus !== "CANCELED";
+            return (
+              <Card key={p.id} className={clsx("flex flex-col p-5", current && "ring-2 ring-sun-500")}>
+                <div className="flex items-center justify-between">
+                  <span className="font-display text-base font-bold text-slate-900">{p.name}</span>
+                  {current && <Badge tone="amber">Current</Badge>}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">{p.tagline}</p>
+                <div className="mt-3 font-display text-2xl font-bold text-slate-900">
+                  {formatINR(p.priceMonthly)}
+                  <span className="text-xs font-normal text-slate-400">/mo + GST</span>
+                </div>
+                <ul className="mt-4 flex-1 space-y-1.5">
+                  {p.features.slice(0, 5).map((f) => (
+                    <li key={f} className="flex items-start gap-1.5 text-xs text-slate-600">
+                      <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" /> {f}
+                    </li>
+                  ))}
+                </ul>
+                <Button variant={current ? "secondary" : "primary"} className="mt-4" disabled={current} loading={busyPlan === p.id} onClick={() => choose(p.id)}>
+                  {current ? "Current plan" : "Switch to " + p.name}
+                </Button>
+              </Card>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs text-slate-400">Need more than Scale, or a custom contract? Email {`support@sirahdigital.in`}.</p>
+      </div>
     </div>
   );
 }

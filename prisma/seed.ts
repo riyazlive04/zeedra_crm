@@ -59,7 +59,14 @@ async function main() {
   });
   await db.organization.update({
     where: { id: org.id },
-    data: { slug: "zeedra-solar", address: "No. 12, Mount Road, Guindy, Chennai 600032", gstin: "33ABCDE1234F1Z5" },
+    data: {
+      slug: "zeedra-solar",
+      address: "No. 12, Mount Road, Guindy, Chennai 600032",
+      gstin: "33ABCDE1234F1Z5",
+      plan: "GROWTH",
+      billingStatus: "ACTIVE",
+      subscribedAt: new Date(2026, 0, 15),
+    },
   });
 
   const hash = await bcrypt.hash(DEMO_PASSWORD, 11);
