@@ -1,16 +1,20 @@
 import { AppShell } from "@/components/shell";
-import { requirePageSession } from "@/lib/auth";
+import { requirePageSession, getActiveUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, ROLE_LABEL } from "@/lib/rbac";
 import { billingState } from "@/lib/billing/plans";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requirePageSession();
+  // getActiveUser is request-memoized — requirePageSession() just ran it, so this reuses
+  // that result instead of issuing a second near-identical query for the same row.
   const [user, org, unread] = await Promise.all([
-    db.user.findUniqueOrThrow({ where: { id: session.userId }, select: { name: true, email: true, role: true, avatarColor: true } }),
+    getActiveUser(session.userId),
     db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { name: true, plan: true, billingStatus: true, trialEndsAt: true } }),
     db.notification.count({ where: { userId: session.userId, read: false } }),
   ]);
+  // requirePageSession() already redirected away if this user weren't active, so it's here.
+  if (!user) throw new Error("Active user vanished mid-request");
   const billing = session.role === "OWNER" ? billingState(org) : null;
   const r = session.role;
   const perms = {

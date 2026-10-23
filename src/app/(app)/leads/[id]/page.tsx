@@ -17,24 +17,25 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requirePageSession();
   const { id } = await params;
-  const lead = await db.lead.findFirst({
-    where: { id, ...leadScope(session) },
-    include: {
-      assignedTo: { select: { id: true, name: true, avatarColor: true } },
-      appointments: { orderBy: { startAt: "desc" }, include: { assignedTo: { select: { name: true } } } },
-      quotations: { orderBy: { createdAt: "desc" } },
-      project: { select: { id: true, code: true, stage: true } },
-    },
-  });
-  if (!lead) notFound();
-
-  const [settings, users, templates, activities, messages] = await Promise.all([
+  // activities/messages key off the route id (not a field of `lead`), so every query can run
+  // together instead of waiting on the lead fetch to resolve first.
+  const [lead, settings, users, templates, activities, messages] = await Promise.all([
+    db.lead.findFirst({
+      where: { id, ...leadScope(session) },
+      include: {
+        assignedTo: { select: { id: true, name: true, avatarColor: true } },
+        appointments: { orderBy: { startAt: "desc" }, include: { assignedTo: { select: { name: true } } } },
+        quotations: { orderBy: { createdAt: "desc" } },
+        project: { select: { id: true, code: true, stage: true } },
+      },
+    }),
     orgSettings(session.orgId),
     db.user.findMany({ where: { organizationId: session.orgId, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     db.messageTemplate.findMany({ where: { organizationId: session.orgId, active: true }, select: { key: true, name: true }, orderBy: { name: "asc" } }),
-    db.activity.findMany({ where: { leadId: lead.id }, orderBy: { createdAt: "desc" }, take: 100, include: { user: { select: { name: true } } } }),
-    db.whatsAppMessage.findMany({ where: { leadId: lead.id }, orderBy: { createdAt: "asc" }, take: 300 }),
+    db.activity.findMany({ where: { leadId: id }, orderBy: { createdAt: "desc" }, take: 100, include: { user: { select: { name: true } } } }),
+    db.whatsAppMessage.findMany({ where: { leadId: id }, orderBy: { createdAt: "asc" }, take: 300 }),
   ]);
+  if (!lead) notFound();
 
   return (
     <div>

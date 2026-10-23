@@ -18,19 +18,22 @@ export const metadata = { title: "Quotation" };
 export default async function QuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requirePageSession();
   const { id } = await params;
-  const q = await db.quotation.findFirst({
-    where: { id, organizationId: session.orgId },
-    include: {
-      lead: true,
-      createdBy: { select: { id: true, name: true, phone: true } },
-      appointment: { select: { startAt: true, endAt: true, type: true } },
-      organization: true,
-    },
-  });
+  // orgSettings only needs session.orgId, not the quotation, so fetch it alongside instead of after.
+  const [q, s] = await Promise.all([
+    db.quotation.findFirst({
+      where: { id, organizationId: session.orgId },
+      include: {
+        lead: true,
+        createdBy: { select: { id: true, name: true, phone: true } },
+        appointment: { select: { startAt: true, endAt: true, type: true } },
+        organization: true,
+      },
+    }),
+    orgSettings(session.orgId),
+  ]);
   if (!q) notFound();
   const reviewer = can(session.role, "quotations:review");
   if (!reviewer && q.createdById !== session.userId && q.lead.assignedToId !== session.userId) notFound();
-  const s = await orgSettings(session.orgId);
   const geo = (q.geoFlags as { checks?: { key: string; label: string; passed: boolean; detail: string }[] } | null)?.checks ?? [];
 
   return (

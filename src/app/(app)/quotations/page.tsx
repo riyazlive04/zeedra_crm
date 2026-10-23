@@ -28,7 +28,7 @@ export default async function QuotationsPage({ searchParams }: { searchParams: P
   if (f === "flagged") where.geoVerdict = { notIn: ["VERIFIED", "OFFICE_CREATED"] };
   else if (f) where.status = f as Prisma.QuotationWhereInput["status"];
 
-  const [quotes, totals, flagged, accepted] = await Promise.all([
+  const [quotes, totals, flagged, accepted, all] = await Promise.all([
     db.quotation.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -38,8 +38,8 @@ export default async function QuotationsPage({ searchParams }: { searchParams: P
     db.quotation.aggregate({ where: { ...base, status: { in: ["SENT", "DRAFT"] } }, _sum: { totalAmount: true, systemKw: true }, _count: true }),
     db.quotation.count({ where: { ...base, geoVerdict: { notIn: ["VERIFIED", "OFFICE_CREATED"] } } }),
     db.quotation.count({ where: { ...base, status: "ACCEPTED" } }),
+    db.quotation.count({ where: base }),
   ]);
-  const all = await db.quotation.count({ where: base });
 
   return (
     <div>

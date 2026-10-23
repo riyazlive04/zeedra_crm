@@ -61,12 +61,20 @@ export async function dashboardStats(session: Session) {
     count: FUNNEL.slice(i).reduce((a, k) => a + (stageCount[k] ?? 0), 0),
   }));
 
+  // Bucket once in a single pass instead of re-filtering the whole 14-day lead list per day.
+  const buckets = new Map<string, { leads: number; won: number }>();
+  for (const l of trendLeads) {
+    const key = l.createdAt.toISOString().slice(0, 10);
+    const bucket = buckets.get(key) ?? { leads: 0, won: 0 };
+    bucket.leads++;
+    if (l.stage === "WON") bucket.won++;
+    buckets.set(key, bucket);
+  }
   const days: { date: string; leads: number; won: number }[] = [];
   for (let i = 13; i >= 0; i--) {
-    const d = new Date(startToday.getTime() - i * 86_400_000);
-    const key = d.toISOString().slice(0, 10);
-    const sameDay = trendLeads.filter((l) => l.createdAt >= d && l.createdAt < new Date(d.getTime() + 86_400_000));
-    days.push({ date: key, leads: sameDay.length, won: sameDay.filter((l) => l.stage === "WON").length });
+    const key = new Date(startToday.getTime() - i * 86_400_000).toISOString().slice(0, 10);
+    const bucket = buckets.get(key);
+    days.push({ date: key, leads: bucket?.leads ?? 0, won: bucket?.won ?? 0 });
   }
 
   const team = users

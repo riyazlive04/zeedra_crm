@@ -15,7 +15,13 @@ const nextConfig = {
   output: process.env.VERCEL ? undefined : "standalone",
   distDir: process.env.NEXT_DIST_DIR || ".next",
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
-  experimental: { serverActions: { bodySizeLimit: "10mb" } },
+  experimental: {
+    serverActions: { bodySizeLimit: "10mb" },
+    // These are barrel-file libraries (hundreds of icons / components re-exported from one
+    // module) — Next otherwise has to pull the whole package into dev compiles and client
+    // bundles instead of just the few things actually imported.
+    optimizePackageImports: ["lucide-react", "recharts", "date-fns"],
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

@@ -189,6 +189,59 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={clsx("animate-pulse rounded-md bg-slate-200/70", className)} />;
 }
 
+/** Instant pending UI for a route's loading.tsx, so navigation never shows a blank page while the server fetches data. */
+export function PageSkeleton({ variant = "table" }: { variant?: "table" | "stats" | "board" | "cards" }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-9 w-28 rounded-lg" />
+      </div>
+
+      {variant === "stats" && (
+        <>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-[92px] rounded-xl" />
+            ))}
+          </div>
+          <div className="grid gap-6 xl:grid-cols-3">
+            <Skeleton className="h-72 rounded-xl xl:col-span-2" />
+            <Skeleton className="h-72 rounded-xl" />
+          </div>
+        </>
+      )}
+
+      {variant === "table" && (
+        <div className="card overflow-hidden p-4">
+          <Skeleton className="mb-4 h-9 w-full max-w-sm rounded-lg" />
+          <div className="space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {variant === "board" && (
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[28rem] rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {variant === "cards" && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 rounded-xl" />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProgressBar({ value, tone = "sun" }: { value: number; tone?: "sun" | "green" | "red" }) {
   const c = tone === "green" ? "bg-emerald-500" : tone === "red" ? "bg-rose-500" : "sun-gradient";
   return (
