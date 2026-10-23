@@ -39,7 +39,14 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
           </ul>
         </div>
         <div className="relative mt-12 flex items-center gap-2 text-xs text-slate-500">
-          <BadgeCheck className="h-4 w-4 text-sun-400" /> Built by {BRAND.builtBy} in collaboration with {BRAND.partner}
+          <BadgeCheck className="h-4 w-4 text-sun-400" />
+          <span>
+            Built by{" "}
+            <a href={BRAND.builtByUrl} target="_blank" rel="noopener noreferrer" className="text-slate-300 underline-offset-2 hover:text-sun-300 hover:underline">
+              {BRAND.builtBy}
+            </a>{" "}
+            in collaboration with {BRAND.partner}
+          </span>
         </div>
       </div>
       <div className="flex items-center justify-center px-5 py-10 sm:px-10">

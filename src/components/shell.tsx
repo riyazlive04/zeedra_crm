@@ -151,7 +151,10 @@ export function AppShell({
         })}
       </div>
       <div className="border-t border-white/5 px-5 py-4 text-[10px] leading-relaxed text-slate-600">
-        Built by <span className="text-slate-400">{BRAND.builtBy}</span>
+        Built by{" "}
+        <a href={BRAND.builtByUrl} target="_blank" rel="noopener noreferrer" className="text-slate-400 underline-offset-2 hover:text-sun-400 hover:underline">
+          {BRAND.builtBy}
+        </a>
         <br />
         in collaboration with <span className="text-slate-400">{BRAND.partner}</span>
       </div>

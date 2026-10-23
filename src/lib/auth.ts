@@ -43,9 +43,10 @@ export async function clearSessionCookie() {
 export async function requirePageSession(permission?: Permission): Promise<Session> {
   const s = await getSession();
   if (!s) redirect("/login");
-  const user = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true } });
+  const user = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true, name: true } });
   if (!user?.active) redirect("/login?error=inactive");
-  const session = { ...s, role: user.role };
+  // Role and name come from the DB so profile edits and role changes apply without re-login.
+  const session = { ...s, role: user.role, name: user.name };
   if (permission && !can(session.role, permission)) redirect("/dashboard?denied=1");
   return session;
 }
@@ -54,9 +55,9 @@ export async function requirePageSession(permission?: Permission): Promise<Sessi
 export async function requireApiSession(permission?: Permission): Promise<Session> {
   const s = await getSession();
   if (!s) throw new ApiError(401, "Not signed in");
-  const user = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true, organizationId: true } });
+  const user = await db.user.findUnique({ where: { id: s.userId }, select: { active: true, role: true, organizationId: true, name: true } });
   if (!user?.active || user.organizationId !== s.orgId) throw new ApiError(401, "Session no longer valid");
-  const session = { ...s, role: user.role };
+  const session = { ...s, role: user.role, name: user.name };
   if (permission && !can(session.role, permission)) throw new ApiError(403, "You do not have permission to do this");
   return session;
 }

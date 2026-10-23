@@ -11,7 +11,8 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  output: "standalone",
+  // Self-contained server bundle for Docker; Vercel packages functions itself.
+  output: process.env.VERCEL ? undefined : "standalone",
   distDir: process.env.NEXT_DIST_DIR || ".next",
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   experimental: { serverActions: { bodySizeLimit: "10mb" } },

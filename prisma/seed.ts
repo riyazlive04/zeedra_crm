@@ -52,7 +52,7 @@ async function main() {
 
   const { org, owner } = await provisionOrganization(db, {
     orgName: "Zeedra Solar Solutions",
-    ownerName: "Senthil Murugan",
+    ownerName: "Faiz",
     email: "owner@zeedra.demo",
     phone: "919840012345",
     password: DEMO_PASSWORD,

@@ -20,7 +20,8 @@
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
     "test:ui": "node scripts/ui-check.mjs",
     "db:postgres": "node scripts/set-db-provider.mjs postgresql",
-    "db:sqlite": "node scripts/set-db-provider.mjs sqlite"
+    "db:sqlite": "node scripts/set-db-provider.mjs sqlite",
+    "vercel-build": "node scripts/set-db-provider.mjs postgresql && prisma generate && prisma migrate deploy && next build"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

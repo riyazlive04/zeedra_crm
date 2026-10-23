@@ -24,13 +24,15 @@ docker compose up -d --build
 
 This starts PostgreSQL, the app (migrations run on start) and a scheduler that triggers automations every 5 minutes. Put Caddy or Nginx in front for HTTPS. Geolocation in the Field App **requires HTTPS**.
 
-## Option B: Vercel + managed Postgres (Neon, Supabase, RDS)
+## Option B: Vercel + Neon Postgres
 
-1. Run `npm run db:postgres` and commit the provider change (the build uses the schema as committed).
-2. Set the build command to `prisma generate && prisma migrate deploy && next build`.
-3. Add the environment variables. `vercel.json` schedules `/api/cron/run` every 15 minutes (Vercel Pro), and Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
+1. In Vercel, choose **Add New → Project**, import the GitHub repository and keep the defaults. The `vercel-build` script switches Prisma to PostgreSQL, applies migrations and builds.
+2. Under **Storage → Create Database → Neon (Postgres)**, connect it to the project. This sets `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct, used for migrations) automatically.
+3. Under **Settings → Environment Variables**, add `AUTH_SECRET`, `CRON_SECRET`, `WHATSAPP_VERIFY_TOKEN`, and `APP_URL` (your `https://….vercel.app` URL), plus any optional keys. Redeploy.
+4. **Scheduler:** `vercel.json` runs `/api/cron/run` once a day, which is all the Hobby plan allows. For the 2-hour and 24-hour visit reminders, add the GitHub repository secrets `APP_URL` and `CRON_SECRET`. The included `Scheduler` workflow then calls it every 10 minutes. On Vercel Pro you can instead change the `vercel.json` schedule to `*/10 * * * *`.
+5. Open `/register` to create your workspace.
 
-SQLite is for local development only. It does not work on serverless platforms.
+SQLite is for local development only. It does not work on Vercel.
 
 ## Database migrations
 
