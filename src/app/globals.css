@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f5f6f8;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .input {
+    @apply block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sun-500 focus:ring-2 focus:ring-sun-500/20 disabled:bg-slate-50 disabled:text-slate-500;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium text-slate-600;
+  }
+  .card {
+    @apply rounded-xl border border-slate-200/80 bg-white shadow-card;
+  }
+  .table-head {
+    @apply bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium;
+  }
+  .sun-gradient {
+    background-image: linear-gradient(135deg, #fbbf24 0%, #f59e0b 45%, #ea580c 100%);
+  }
+}
+
+/* Leaflet container should inherit rounded corners */
+.leaflet-container {
+  font-family: inherit;
+  border-radius: inherit;
+  z-index: 0;
+}
+/* Tailwind preflight sets svg/img to max-width:100%; height:auto — that rescales Leaflet's overlay
+   SVG and tiles, so markers and geofence circles render at the wrong size and position. */
+.leaflet-container svg,
+.leaflet-container img {
+  max-width: none !important;
+  max-height: none !important;
+}
+.leaflet-container svg {
+  display: inline;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}

@@ -1,0 +1,41 @@
+# Production-like stack: PostgreSQL + Sirah × Zeedra Solar + a scheduler that triggers time-based automations.
+#   cp .env.example .env   # fill AUTH_SECRET, CRON_SECRET, APP_URL, integrations
+#   docker compose up -d --build
+#   open http://localhost:3000/register to create the first workspace (migrations run automatically)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zeedra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
+      POSTGRES_DB: zeedra
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeedra"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://zeedra:${POSTGRES_PASSWORD:-change-me-db-password}@db:5432/zeedra?schema=public
+    ports:
+      - "3000:3000"
+
+  scheduler:
+    image: curlimages/curl:8.10.1
+    restart: unless-stopped
+    depends_on:
+      - app
+    env_file: .env
+    entrypoint: ["/bin/sh", "-c", "while true; do curl -fsS -X POST -H \"Authorization: Bearer $$CRON_SECRET\" http://app:3000/api/cron/run || true; sleep 300; done"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,660 @@
+// Sirah × Zeedra Solar — Solar CRM data model
+// Multi-tenant: every business row carries organizationId and every query is scoped by it.
+// Dev uses SQLite; switch `provider` to "postgresql" for production (see docs/DEPLOYMENT.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Tenancy & users ─────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  phone     String?
+  email     String?
+  address   String?
+  gstin     String?
+  logoUrl   String?
+  plan      String   @default("GROWTH") // STARTER | GROWTH | ENTERPRISE
+  apiKey    String   @unique // lead-capture webhook key (x-api-key)
+  settings  Json // OrgSettings — pricing, tariff, subsidy, geofence, qualification thresholds
+  // WhatsApp Cloud API credentials (per tenant)
+  waPhoneNumberId String?
+  waAccessToken   String?
+  waBusinessId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  leads         Lead[]
+  appointments  Appointment[]
+  quotations    Quotation[]
+  templates     MessageTemplate[]
+  messages      WhatsAppMessage[]
+  rules         AutomationRule[]
+  activities    Activity[]
+  tasks         Task[]
+  projects      Project[]
+  pings         LocationPing[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  counters      Counter[]
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  SALES_MANAGER
+  TELECALLER
+  FIELD_SALES
+  INSTALLER
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  email          String   @unique
+  phone          String?
+  passwordHash   String
+  role           Role     @default(FIELD_SALES)
+  active         Boolean  @default(true)
+  territory      String?
+  avatarColor    String   @default("#f59e0b")
+  // Google Calendar OAuth (per salesperson)
+  googleEmail        String?
+  googleRefreshToken String?
+  googleCalendarId   String? @default("primary")
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedLeads    Lead[]        @relation("LeadAssignee")
+  createdLeads     Lead[]        @relation("LeadCreator")
+  appointments     Appointment[]
+  quotations       Quotation[]
+  activities       Activity[]
+  tasks            Task[]
+  pings            LocationPing[]
+  notifications    Notification[]
+  projectsManaged  Project[]
+
+  @@index([organizationId, role])
+}
+
+// Per-org sequence numbers (LD-00001, QT-2026-00001 …) generated transactionally.
+model Counter {
+  organizationId String
+  key            String
+  value          Int    @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, key])
+}
+
+// ─── Leads ───────────────────────────────────────────────────────────────
+
+enum LeadSource {
+  WEBSITE
+  FACEBOOK
+  INSTAGRAM
+  GOOGLE_ADS
+  WHATSAPP
+  REFERRAL
+  WALK_IN
+  JUSTDIAL
+  INDIAMART
+  CHANNEL_PARTNER
+  COLD_CALL
+  EXHIBITION
+  OTHER
+}
+
+enum Segment {
+  RESIDENTIAL
+  HOUSING_SOCIETY
+  COMMERCIAL
+  INDUSTRIAL
+  AGRICULTURE
+  INSTITUTIONAL
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  SITE_VISIT_SCHEDULED
+  SITE_VISIT_DONE
+  QUOTATION_SENT
+  NEGOTIATION
+  WON
+  LOST
+  DISQUALIFIED
+}
+
+enum Temperature {
+  HOT
+  WARM
+  COLD
+}
+
+enum RoofType {
+  RCC
+  METAL_SHEET
+  TILED
+  ASBESTOS
+  GROUND_MOUNT
+  OTHER
+}
+
+enum Timeline {
+  IMMEDIATE
+  WITHIN_1_MONTH
+  ONE_TO_3_MONTHS
+  THREE_TO_6_MONTHS
+  EXPLORING
+}
+
+enum PaymentMode {
+  CASH
+  LOAN
+  PARTIAL_LOAN
+  UNDECIDED
+}
+
+enum Objection {
+  NONE
+  PRICE
+  FINANCE
+  ROOF_ISSUE
+  OWNERSHIP
+  FAMILY_DECISION
+  TRUST
+  TIMING
+  COMPETITOR
+  OTHER
+}
+
+model Lead {
+  id             String     @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  phone          String // E.164-ish, normalised to 91XXXXXXXXXX
+  altPhone       String?
+  email          String?
+  whatsappOptIn  Boolean    @default(true)
+  source         LeadSource @default(OTHER)
+  campaign       String?
+  segment        Segment    @default(RESIDENTIAL)
+  // Address & geo (site location is the reference point for GPS validation)
+  address        String?
+  city           String?
+  district       String?
+  state          String?
+  pincode        String?
+  lat            Float?
+  lng            Float?
+  sitePinned     Boolean    @default(false) // true once a manager/verified visit has fixed the site location
+
+  stage          LeadStage   @default(NEW)
+  temperature    Temperature @default(COLD)
+  score          Int         @default(0)
+  scoreBreakdown Json?
+
+  // ── Basic qualification (electricity bill + ownership + roof)
+  monthlyBill      Float?
+  monthlyUnits     Float?
+  discom           String?
+  consumerNumber   String?
+  sanctionedLoadKw Float?
+  phase            String? // SINGLE | THREE
+  ownsProperty     Boolean?
+  roofType         RoofType?
+  roofAreaSqft     Float?
+  shadowFree       Boolean?
+  floors           Int?
+  basicQualified   Boolean?
+  basicCheckReason String?
+
+  // ── Sales qualification
+  siteVisitReady       Boolean?
+  installationTimeline Timeline?
+  paymentMode          PaymentMode?
+  budgetConfirmed      Boolean?
+  loanInterest         Boolean?
+  loanStatus           String? // NOT_STARTED | DOCS_PENDING | APPLIED | SANCTIONED | REJECTED
+  objection            Objection? @default(NONE)
+  objectionNote        String?
+  decisionMakerMet     Boolean?
+  competitorQuote      Float?
+
+  // ── Sizing (computed snapshot)
+  recommendedKw Float?
+  estimatedCost Float?
+  subsidyAmount Float?
+
+  // ── AI
+  aiSummary    String?
+  aiNextAction String?
+  aiUpdatedAt  DateTime?
+
+  // ── Ownership & lifecycle
+  assignedToId   String?
+  createdById    String?
+  nextFollowUpAt DateTime?
+  lastContactAt  DateTime?
+  lostReason     String?
+  wonAt          DateTime?
+  dealValue      Float?
+  tags           String? // comma-separated
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo   User?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy    User?             @relation("LeadCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  activities   Activity[]
+  appointments Appointment[]
+  quotations   Quotation[]
+  messages     WhatsAppMessage[]
+  tasks        Task[]
+  project      Project?
+
+  @@unique([organizationId, code])
+  @@index([organizationId, stage])
+  @@index([organizationId, temperature])
+  @@index([organizationId, assignedToId])
+  @@index([organizationId, phone])
+  @@index([organizationId, createdAt])
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  STAGE_CHANGE
+  QUALIFICATION
+  WHATSAPP
+  APPOINTMENT
+  CHECK_IN
+  QUOTATION
+  AI
+  AUTOMATION
+  ASSIGNMENT
+  SYSTEM
+}
+
+model Activity {
+  id             String       @id @default(cuid())
+  organizationId String
+  leadId         String?
+  userId         String?
+  type           ActivityType
+  title          String
+  body           String?
+  meta           Json?
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, leadId, createdAt])
+}
+
+model Task {
+  id             String    @id @default(cuid())
+  organizationId String
+  leadId         String?
+  assignedToId   String?
+  title          String
+  dueAt          DateTime
+  done           Boolean   @default(false)
+  doneAt         DateTime?
+  priority       String    @default("NORMAL") // LOW | NORMAL | HIGH
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo   User?        @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, assignedToId, done, dueAt])
+}
+
+// ─── Appointments (Google Calendar synced) ───────────────────────────────
+
+enum AppointmentType {
+  SITE_VISIT
+  QUOTATION_MEETING
+  FOLLOW_UP_CALL
+  LOAN_DOCUMENTATION
+  INSTALLATION
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  organizationId String
+  leadId         String
+  assignedToId   String
+  type           AppointmentType   @default(SITE_VISIT)
+  status         AppointmentStatus @default(SCHEDULED)
+  startAt        DateTime
+  endAt          DateTime
+  address        String?
+  notes          String?
+  outcome        String?
+  googleEventId  String?
+  googleSyncError String?
+  // GPS check-in evidence
+  checkInAt       DateTime?
+  checkInLat      Float?
+  checkInLng      Float?
+  checkInAccuracy Float?
+  checkInDistanceM Float?
+  checkInVerdict  String? // VERIFIED | OUT_OF_RANGE | LOW_ACCURACY | ...
+  checkOutAt      DateTime?
+  reminder24Sent  Boolean @default(false)
+  reminder2Sent   Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo   User         @relation(fields: [assignedToId], references: [id], onDelete: Cascade)
+  quotations   Quotation[]
+
+  @@index([organizationId, startAt])
+  @@index([organizationId, assignedToId, startAt])
+}
+
+// ─── Quotations with GPS + time validation ───────────────────────────────
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum GeoVerdict {
+  VERIFIED
+  OUT_OF_RANGE
+  LOW_ACCURACY
+  TIME_MISMATCH
+  CLOCK_TAMPER
+  IMPOSSIBLE_TRAVEL
+  SITE_UNPINNED
+  NO_GPS
+  OFFICE_CREATED
+}
+
+model Quotation {
+  id             String          @id @default(cuid())
+  organizationId String
+  number         String
+  leadId         String
+  createdById    String
+  appointmentId  String?
+  status         QuotationStatus @default(DRAFT)
+  version        Int             @default(1)
+
+  // System design
+  systemKw        Float
+  panelBrand      String
+  panelWattage    Int
+  panelCount      Int
+  panelType       String  @default("Mono PERC Bifacial")
+  inverterBrand   String
+  inverterKw      Float
+  inverterType    String  @default("On-grid String")
+  structureType   String  @default("Hot-dip galvanised elevated")
+  lineItems       Json // [{name, qty, unit, rate, amount}]
+  // Commercials
+  subtotal        Float
+  discount        Float   @default(0)
+  gstRate         Float
+  gstAmount       Float
+  totalAmount     Float
+  subsidyAmount   Float
+  netCost         Float
+  // Finance & ROI
+  loanAmount      Float?
+  loanRate        Float?
+  loanTenureMonths Int?
+  emi             Float?
+  annualGenerationKwh Float
+  annualSavings   Float
+  paybackYears    Float
+  savings25Years  Float
+  co2TonnesPerYear Float
+  validUntil      DateTime
+  notes           String?
+  terms           String?
+
+  // ── Field validation evidence (who, where, when)
+  capturedLat       Float?
+  capturedLng       Float?
+  capturedAccuracyM Float?
+  deviceTime        DateTime?
+  serverTime        DateTime @default(now())
+  distanceFromSiteM Float?
+  geoVerdict        GeoVerdict @default(OFFICE_CREATED)
+  geoFlags          Json? // string[] of all failed checks
+  deviceInfo        String?
+  reviewedById      String?
+  reviewNote        String?
+
+  shareToken String?  @unique // unguessable token for the customer-facing proposal link
+  viewedAt   DateTime?
+  sentAt     DateTime?
+  acceptedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, number])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, geoVerdict])
+}
+
+model LocationPing {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  lat            Float
+  lng            Float
+  accuracyM      Float?
+  source         String // CHECK_IN | QUOTATION | HEARTBEAT
+  refId          String?
+  deviceTime     DateTime?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, createdAt])
+}
+
+// ─── WhatsApp ────────────────────────────────────────────────────────────
+
+model MessageTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String // stable identifier used by automation rules
+  name           String
+  category       String   @default("UTILITY") // UTILITY | MARKETING
+  metaTemplateName String? // approved template name in Meta (needed outside 24h window)
+  language       String   @default("en")
+  body           String // supports {{variables}}
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+}
+
+model WhatsAppMessage {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String?
+  phone          String
+  direction      String // OUT | IN
+  body           String
+  templateKey    String?
+  status         String   @default("QUEUED") // QUEUED | SENT | DELIVERED | READ | FAILED | RECEIVED | SIMULATED
+  providerId     String?  @unique
+  error          String?
+  automated      Boolean  @default(false)
+  sentById       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, leadId, createdAt])
+  @@index([organizationId, phone])
+}
+
+// ─── Automations ─────────────────────────────────────────────────────────
+
+model AutomationRule {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  trigger        String // see src/lib/automation/types.ts
+  conditions     Json // [{field, op, value}]
+  actions        Json // [{type, ...params}]
+  delayMinutes   Int       @default(0)
+  active         Boolean   @default(true)
+  runCount       Int       @default(0)
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, trigger, active])
+}
+
+// ─── Post-sale project execution (PM Surya Ghar / DISCOM net-metering flow) ─
+
+enum ProjectStage {
+  BOOKING_CONFIRMED
+  DOCUMENTATION
+  PORTAL_REGISTRATION
+  DISCOM_FEASIBILITY
+  DESIGN_APPROVED
+  MATERIAL_DISPATCHED
+  INSTALLATION
+  NET_METER_APPLIED
+  DISCOM_INSPECTION
+  COMMISSIONED
+  SUBSIDY_APPLIED
+  SUBSIDY_RECEIVED
+  CLOSED
+}
+
+model Project {
+  id             String       @id @default(cuid())
+  organizationId String
+  leadId         String       @unique
+  code           String
+  stage          ProjectStage @default(BOOKING_CONFIRMED)
+  systemKw       Float
+  contractValue  Float
+  amountReceived Float        @default(0)
+  managerId      String?
+  installDate    DateTime?
+  commissionedAt DateTime?
+  portalAppId    String? // PM Surya Ghar national portal application number
+  netMeterNo     String?
+  stageHistory   Json // [{stage, at, by}]
+  checklist      Json // {documentKey: boolean}
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  manager      User?        @relation(fields: [managerId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, code])
+  @@index([organizationId, stage])
+}
+
+// ─── Platform ────────────────────────────────────────────────────────────
+
+model Notification {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  title          String
+  body           String?
+  href           String?
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String
+  entity         String
+  entityId       String?
+  meta           Json?
+  ip             String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int
+  resetAt   DateTime
+}
+
+// Idempotency ledger: a rule fires at most once per (rule, reference) — e.g. one reminder per appointment.
+model AutomationRun {
+  id        String   @id @default(cuid())
+  ruleId    String
+  refKey    String
+  status    String   @default("OK") // OK | ERROR | SKIPPED
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@unique([ruleId, refKey])
+  @@index([createdAt])
+}
