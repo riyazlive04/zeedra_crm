@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarDays, Smartphone, FileText, MessageCircle, MapPinned, Hammer, Workflow,
-  Calculator, Settings, Bell, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2,
+  Calculator, Settings, Bell, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft,
 } from "lucide-react";
 import { Avatar } from "./ui";
 import { api } from "@/lib/client";
@@ -137,6 +137,7 @@ export function AppShell({
               {n.section && <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{n.section}</div>}
               <Link
                 href={n.href}
+                onClick={() => setMobileOpen(false)}
                 className={clsx(
                   "group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition",
                   active ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-slate-100",
@@ -176,6 +177,11 @@ export function AppShell({
 
       <div className="lg:pl-60">
         <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200/70 bg-white/85 px-4 backdrop-blur sm:px-6">
+          {pathname !== "/dashboard" && (
+            <button className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => router.back()} aria-label="Go back">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
           <button className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
