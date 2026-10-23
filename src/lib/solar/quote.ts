@@ -1,4 +1,5 @@
 import type { SizingResult } from "./sizing";
+import type { OrgSettings } from "../settings";
 
 export interface LineItem {
   name: string;
@@ -9,22 +10,50 @@ export interface LineItem {
   amount: number;
 }
 
-/** Splits the system price into a customer-friendly bill of materials. */
-export function buildLineItems(sz: SizingResult, input: { panelBrand: string; panelWattage: number; inverterBrand: string; structureType?: string }): LineItem[] {
-  const split: [string, string, number, string, number][] = [
-    [`${input.panelBrand} Mono PERC bifacial DCR modules`, `${sz.panelCount} × ${input.panelWattage} Wp`, sz.panelCount, "Nos", 0.52],
-    [`${input.inverterBrand} on-grid inverter`, `${sz.inverterKw} kW`, 1, "Nos", 0.15],
-    [input.structureType || "Hot-dip galvanised elevated mounting structure", `${sz.recommendedKw} kWp`, 1, "Set", 0.12],
-    ["Balance of system — DC/AC cables, ACDB/DCDB, earthing, lightning arrester", "As per design", 1, "Lot", 0.11],
-    ["Installation, testing & commissioning", "Turnkey", 1, "Job", 0.07],
-    ["Net-metering, DISCOM liaison & subsidy documentation", "PM Surya Ghar", 1, "Job", 0.03],
+const PANEL_SHARE = 0.52;
+const INVERTER_SHARE = 0.15;
+
+/** Splits the system price into a customer-friendly, itemised bill of materials. */
+export function buildLineItems(
+  sz: SizingResult,
+  input: { panelBrand: string; panelWattage: number; inverterBrand: string; structureType?: string },
+  bom: OrgSettings["bomRates"],
+): LineItem[] {
+  const kw = sz.recommendedKw;
+  const panelAmount = Math.round(sz.subtotal * PANEL_SHARE);
+  const inverterAmount = Math.round(sz.subtotal * INVERTER_SHARE);
+
+  // Everything below is priced off configurable ₹/kW build rates, then scaled to fit
+  // whatever is left of the system price after panels + inverter — so the BOM always
+  // adds up to the quoted total, however large or small the system is.
+  const bos: [string, string, number, string, number][] = [
+    [input.structureType || "Hot-dip galvanised elevated mounting structure", `${kw} kWp`, 1, "Set", bom.mountingPerKw * kw],
+    ["DCDB — DC distribution box", `${kw} kWp`, 1, "Set", bom.dcdbPerKw * kw],
+    ["ACDB — AC distribution box", `${kw} kWp`, 1, "Set", bom.acdbPerKw * kw],
+    ["DC cable", `${kw} kWp`, 1, "Lot", bom.dcCablePerKw * kw],
+    ["AC copper cable", `${kw} kWp`, 1, "Lot", bom.acCablePerKw * kw],
+    ["Earthing kit & lightning arrester", "Per MNRE guidelines", 1, "Set", bom.earthingKitEach + bom.lightningArrestorEach],
+    ["Miscellaneous hardware", `${kw} kWp`, 1, "Lot", bom.miscPerKw * kw],
+    ["Installation, testing & commissioning", "Turnkey", 1, "Job", bom.installationPerKw * kw],
+    ["Transport & logistics", `${kw} kWp`, 1, "Lot", bom.transportPerKw * kw],
+    ["Net-metering, DISCOM liaison & subsidy documentation", "PM Surya Ghar", 1, "Job", bom.netMeteringPerKw * kw],
   ];
+  const bosPool = sz.subtotal - panelAmount - inverterAmount;
+  const bosRaw = bos.reduce((sum, [, , , , amount]) => sum + amount, 0);
+  const scale = bosRaw > 0 ? bosPool / bosRaw : 0;
+
   let allocated = 0;
-  return split.map(([name, spec, qty, unit, pct], i) => {
-    const amount = i === split.length - 1 ? sz.subtotal - allocated : Math.round(sz.subtotal * pct);
+  const bosLines = bos.map(([name, spec, qty, unit, raw], i) => {
+    const amount = i === bos.length - 1 ? bosPool - allocated : Math.round(raw * scale);
     allocated += amount;
     return { name, spec, qty, unit, rate: Math.round(amount / qty), amount };
   });
+
+  return [
+    { name: `${input.panelBrand} Mono PERC bifacial DCR modules`, spec: `${sz.panelCount} × ${input.panelWattage} Wp`, qty: sz.panelCount, unit: "Nos", rate: Math.round(panelAmount / sz.panelCount), amount: panelAmount },
+    { name: `${input.inverterBrand} on-grid inverter`, spec: `${sz.inverterKw} kW`, qty: 1, unit: "Nos", rate: inverterAmount, amount: inverterAmount },
+    ...bosLines,
+  ];
 }
 
 

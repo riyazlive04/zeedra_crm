@@ -84,6 +84,13 @@ export function rateForKw(kw: number, s: OrgSettings): number {
   return (slabs.find((x) => kw <= x.upToKw) ?? slabs[slabs.length - 1]).ratePerKw;
 }
 
+/** State top-up subsidy — a flat amount per size tier (e.g. Tamil Nadu G.O. 102), not per-kW. */
+export function stateSubsidy(kw: number, tiers: OrgSettings["stateSubsidyTiers"]): number {
+  if (kw <= 0 || tiers.length === 0) return 0;
+  const sorted = [...tiers].sort((a, b) => a.upToKw - b.upToKw);
+  return (sorted.find((t) => kw <= t.upToKw) ?? sorted[sorted.length - 1]).amount;
+}
+
 export function pickInverterKw(dcKw: number): number {
   // Typical DC/AC ratio up to ~1.1 — choose the smallest standard inverter ≥ 90% of DC.
   const target = dcKw * 0.9;
@@ -140,10 +147,7 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
   const totalCost = taxable + gstAmount;
 
   const central = s.centralSubsidyEnabled ? centralSubsidy(dcKw, segment) : 0;
-  const state =
-    s.stateSubsidyPerKw > 0
-      ? Math.round(Math.min(dcKw * s.stateSubsidyPerKw, s.stateSubsidyCap > 0 ? s.stateSubsidyCap : Infinity))
-      : 0;
+  const state = stateSubsidy(dcKw, s.stateSubsidyTiers);
   const subsidy = Math.min(central + state, totalCost);
   const netCost = totalCost - subsidy;
 

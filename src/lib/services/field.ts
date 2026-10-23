@@ -113,14 +113,14 @@ export async function checkIn(session: Session, appointmentId: string, capture: 
   return { appointment: updated, validation: result };
 }
 
-export async function checkOut(session: Session, appointmentId: string, outcome: string | null) {
+export async function checkOut(session: Session, appointmentId: string, outcome: string | null, itemsGiven: string[] = []) {
   const appt = await db.appointment.findFirst({ where: { id: appointmentId, organizationId: session.orgId } });
   if (!appt) throw new ApiError(404, "Appointment not found");
   if (appt.assignedToId !== session.userId && !can(session.role, "quotations:review"))
     throw new ApiError(403, "Only the assigned salesperson can complete this visit");
   const updated = await db.appointment.update({
     where: { id: appt.id },
-    data: { status: "COMPLETED", checkOutAt: new Date(), outcome },
+    data: { status: "COMPLETED", checkOutAt: new Date(), outcome, itemsGiven: itemsGiven.length ? itemsGiven : undefined },
   });
   await logActivity({
     orgId: session.orgId,
@@ -128,7 +128,7 @@ export async function checkOut(session: Session, appointmentId: string, outcome:
     userId: session.userId,
     type: "APPOINTMENT",
     title: `${humanize(appt.type)} completed`,
-    body: outcome,
+    body: [outcome, itemsGiven.length ? `Given to customer: ${itemsGiven.join(", ")}` : null].filter(Boolean).join("\n"),
   });
   if (appt.type === "SITE_VISIT") await advanceStage(appt.leadId, "SITE_VISIT_DONE", session.userId);
   return updated;
@@ -223,7 +223,7 @@ export async function createQuotation(session: Session, input: QuotationInput) {
       inverterBrand: input.inverterBrand,
       inverterKw: sz.inverterKw,
       structureType: input.structureType || "Hot-dip galvanised elevated",
-      lineItems: buildLineItems(sz, input) as unknown as Prisma.InputJsonValue,
+      lineItems: buildLineItems(sz, input, s.bomRates) as unknown as Prisma.InputJsonValue,
       subtotal: sz.subtotal,
       discount: sz.discount,
       gstRate: s.gstRate,

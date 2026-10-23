@@ -69,7 +69,7 @@ describe("quotation line items", () => {
   it("allocates the subtotal exactly across the bill of materials", () => {
     for (const units of [120, 333, 777, 2400]) {
       const sz = sizeSystem({ monthlyUnits: units }, S);
-      const items = buildLineItems(sz, { panelBrand: "Waaree", panelWattage: 550, inverterBrand: "Growatt" });
+      const items = buildLineItems(sz, { panelBrand: "Waaree", panelWattage: 550, inverterBrand: "Growatt" }, S.bomRates);
       expect(items.reduce((a, b) => a + b.amount, 0)).toBe(sz.subtotal);
       expect(items[0].qty).toBe(sz.panelCount);
     }

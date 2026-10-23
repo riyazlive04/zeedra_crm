@@ -86,6 +86,11 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
       <NumberInput value={s[k] as number} onChange={(v) => setS((x) => ({ ...x, [k]: v ?? 0 }))} suffix={suffix} prefix={prefix} />
     </Field>
   );
+  const bomNum = (k: keyof OrgSettings["bomRates"], label: string, suffix?: string) => (
+    <Field label={label}>
+      <NumberInput value={s.bomRates[k]} onChange={(v) => setS((x) => ({ ...x, bomRates: { ...x.bomRates, [k]: v ?? 0 } }))} prefix="₹" suffix={suffix} />
+    </Field>
+  );
 
   return (
     <Card>
@@ -127,11 +132,48 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
               </div>
             </div>
             <div className="grid gap-4 rounded-xl bg-emerald-50/60 p-4 sm:grid-cols-3">
-              <Field label="PM Surya Ghar central subsidy" hint="₹30k/kW up to 2 kW + ₹18k 3rd kW (max ₹78k); RWA ₹18k/kW">
+              <Field label="PM Surya Ghar central subsidy" hint="₹30k/kW up to 2 kW + ₹18k 3rd kW (max ₹78k); RWA ₹18k/kW" className="sm:col-span-3">
                 <YesNo value={s.centralSubsidyEnabled} onChange={(v) => setS((x) => ({ ...x, centralSubsidyEnabled: v ?? true }))} yes="Enabled" no="Disabled" />
               </Field>
-              {num("stateSubsidyPerKw", "State top-up subsidy", "₹/kW")}
-              {num("stateSubsidyCap", "State subsidy cap", "₹", "0 = no cap")}
+              <div className="sm:col-span-3">
+                <div className="label">State top-up subsidy by system size (e.g. Tamil Nadu G.O. 102) — flat amount, not per-kW</div>
+                <div className="space-y-2">
+                  {s.stateSubsidyTiers.map((tier, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <span className="w-16 text-slate-500">Up to</span>
+                      <div className="w-32">
+                        <NumberInput suffix="kW" value={tier.upToKw} onChange={(v) => setS((x) => ({ ...x, stateSubsidyTiers: x.stateSubsidyTiers.map((t, j) => (j === i ? { ...t, upToKw: v ?? 1 } : t)) }))} />
+                      </div>
+                      <div className="w-40">
+                        <NumberInput prefix="₹" value={tier.amount} onChange={(v) => setS((x) => ({ ...x, stateSubsidyTiers: x.stateSubsidyTiers.map((t, j) => (j === i ? { ...t, amount: v ?? 0 } : t)) }))} />
+                      </div>
+                      <button onClick={() => setS((x) => ({ ...x, stateSubsidyTiers: x.stateSubsidyTiers.filter((_, j) => j !== i) }))} disabled={s.stateSubsidyTiers.length < 1} className="text-slate-400 hover:text-rose-600 disabled:opacity-30" aria-label="Remove tier">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button size="xs" onClick={() => setS((x) => ({ ...x, stateSubsidyTiers: [...x.stateSubsidyTiers, { upToKw: 10, amount: 0 }] }))}>
+                    <Plus className="h-3 w-3" /> Add tier
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="label">Installation & balance-of-system rates</div>
+              <p className="mb-2 text-xs text-slate-500">Per-kW build costs used to itemise the bill of materials on every proposal. Panels (52%) and inverter (15%) are priced as a share of the system price above; everything below fills the rest, scaled to match.</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {bomNum("mountingPerKw", "Mounting structure", "/kW")}
+                {bomNum("dcdbPerKw", "DCDB", "/kW")}
+                {bomNum("acdbPerKw", "ACDB", "/kW")}
+                {bomNum("dcCablePerKw", "DC cable", "/kW")}
+                {bomNum("acCablePerKw", "AC copper cable", "/kW")}
+                {bomNum("miscPerKw", "Miscellaneous hardware", "/kW")}
+                {bomNum("installationPerKw", "Installation & commissioning", "/kW")}
+                {bomNum("transportPerKw", "Transport & logistics", "/kW")}
+                {bomNum("netMeteringPerKw", "Net-metering & documentation", "/kW")}
+                {bomNum("lightningArrestorEach", "Lightning arrestor", "each")}
+                {bomNum("earthingKitEach", "Earthing kit", "each")}
+              </div>
             </div>
             <div className="grid gap-4 rounded-xl bg-sky-50/60 p-4 sm:grid-cols-3">
               {num("loanRatePct", "Default loan rate", "% p.a.")}

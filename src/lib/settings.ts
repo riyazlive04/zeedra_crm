@@ -37,10 +37,45 @@ export const orgSettingsSchema = z.object({
   gstRate: z.number().min(0).max(28).default(8.9), // composite: 70% goods @5% + 30% services @18%
   quotationValidityDays: z.number().int().positive().default(15),
 
+  // Installation & balance-of-system build costs (₹/kW unless noted), used to itemise the BOM on every proposal
+  bomRates: z
+    .object({
+      mountingPerKw: z.number().min(0),
+      dcdbPerKw: z.number().min(0),
+      acdbPerKw: z.number().min(0),
+      dcCablePerKw: z.number().min(0),
+      acCablePerKw: z.number().min(0),
+      miscPerKw: z.number().min(0),
+      installationPerKw: z.number().min(0),
+      transportPerKw: z.number().min(0),
+      netMeteringPerKw: z.number().min(0),
+      lightningArrestorEach: z.number().min(0),
+      earthingKitEach: z.number().min(0),
+    })
+    .default({
+      mountingPerKw: 6200,
+      dcdbPerKw: 800,
+      acdbPerKw: 800,
+      dcCablePerKw: 1000,
+      acCablePerKw: 1000,
+      miscPerKw: 800,
+      installationPerKw: 3600,
+      transportPerKw: 500,
+      netMeteringPerKw: 500,
+      lightningArrestorEach: 1200,
+      earthingKitEach: 1500,
+    }),
+
   // Subsidy — PM Surya Ghar Muft Bijli Yojana (central) + optional state top-up
   centralSubsidyEnabled: z.boolean().default(true),
-  stateSubsidyPerKw: z.number().min(0).default(0),
-  stateSubsidyCap: z.number().min(0).default(0),
+  // Flat amount by system-size tier, e.g. Tamil Nadu G.O. 102: ₹5k (1 kW) / ₹10k (2 kW) / ₹22k (3 kW+)
+  stateSubsidyTiers: z
+    .array(z.object({ upToKw: z.number().positive(), amount: z.number().min(0) }))
+    .default([
+      { upToKw: 1, amount: 5000 },
+      { upToKw: 2, amount: 10000 },
+      { upToKw: 3, amount: 22000 },
+    ]),
 
   // Finance
   loanRatePct: z.number().min(0).max(30).default(7),

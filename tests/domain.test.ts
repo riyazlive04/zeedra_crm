@@ -32,7 +32,7 @@ describe("system sizing", () => {
     expect(r.requiredKw).toBeCloseTo(3.09, 1);
     expect(r.panelCount).toBe(Math.ceil(3000 / 550));
     expect(r.recommendedKw).toBeCloseTo(3.3, 2);
-    expect(r.subsidy).toBe(78000);
+    expect(r.subsidy).toBe(100000); // ₹78k central (PM Surya Ghar) + ₹22k state top-up (TN G.O. 102, 3kW+ tier)
     expect(r.totalCost).toBe(r.subtotal + r.gstAmount);
     expect(r.netCost).toBe(r.totalCost - r.subsidy);
     expect(r.paybackYears).toBeGreaterThan(1);
