@@ -10,6 +10,20 @@ if (!["postgresql", "sqlite"].includes(provider)) {
   process.exit(1);
 }
 
+if (provider === "postgresql" && !process.env.DATABASE_URL) {
+  console.error(
+    [
+      "",
+      "✖ DATABASE_URL is not set — no PostgreSQL database is connected to this deployment.",
+      "  On Vercel: Project → Storage → Create Database → Neon (Postgres) → Connect to this project",
+      "  (enable it for Production and Preview), then Deployments → Redeploy.",
+      "  Elsewhere: set DATABASE_URL=postgresql://user:pass@host:5432/db?sslmode=require",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
 // Neon via the Vercel integration exposes DATABASE_URL_UNPOOLED; others commonly use DIRECT_URL.
 const directVar = provider === "postgresql" ? ["DATABASE_URL_UNPOOLED", "DIRECT_URL"].find((v) => process.env[v]) : undefined;
 
