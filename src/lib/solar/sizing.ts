@@ -64,18 +64,26 @@ export function unitsFromBill(bill: number, s: OrgSettings): number {
 }
 
 /**
- * PM Surya Ghar central financial assistance.
- * Residential: ₹30,000/kW for the first 2 kW, ₹18,000 for the 3rd kW, capped at ₹78,000.
- * Housing society / RWA (common facilities, incl. EV charging): ₹18,000/kW up to 500 kW.
+ * PM Surya Ghar central financial assistance — two claim types, rates set once by the admin
+ * (Settings → Pricing & subsidy):
+ *  - House (segment RESIDENTIAL): per-kW tiers, e.g. ₹30,000/kW up to 2 kW then ₹18,000 for the 3rd kW,
+ *    capped at a max amount (default ₹78,000).
+ *  - Community (segment HOUSING_SOCIETY — RWA common facilities incl. EV charging): a flat ₹/kW rate,
+ *    capped at a max system size (default ₹18,000/kW up to 500 kW).
  */
-export function centralSubsidy(kw: number, segment: SegmentKey): number {
+export function centralSubsidy(kw: number, segment: SegmentKey, rates: OrgSettings["subsidyRates"]): number {
   if (kw <= 0) return 0;
   if (segment === "RESIDENTIAL") {
-    const first = Math.min(kw, 2) * 30000;
-    const third = Math.min(Math.max(kw - 2, 0), 1) * 18000;
-    return Math.min(Math.round(first + third), 78000);
+    const tiers = [...rates.house.tiers].sort((a, b) => a.uptoKw - b.uptoKw);
+    let amount = 0;
+    let floor = 0;
+    for (const tier of tiers) {
+      amount += Math.max(0, Math.min(kw, tier.uptoKw) - floor) * tier.ratePerKw;
+      floor = tier.uptoKw;
+    }
+    return Math.min(Math.round(amount), rates.house.maxAmount);
   }
-  if (segment === "HOUSING_SOCIETY") return Math.round(Math.min(kw, 500) * 18000);
+  if (segment === "HOUSING_SOCIETY") return Math.round(Math.min(kw, rates.community.maxKw) * rates.community.ratePerKw);
   return 0;
 }
 
@@ -146,7 +154,7 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
   const gstAmount = Math.round((taxable * s.gstRate) / 100);
   const totalCost = taxable + gstAmount;
 
-  const central = s.centralSubsidyEnabled ? centralSubsidy(dcKw, segment) : 0;
+  const central = s.centralSubsidyEnabled ? centralSubsidy(dcKw, segment, s.subsidyRates) : 0;
   const state = stateSubsidy(dcKw, s.stateSubsidyTiers);
   const subsidy = Math.min(central + state, totalCost);
   const netCost = totalCost - subsidy;

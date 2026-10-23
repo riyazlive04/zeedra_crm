@@ -8,16 +8,16 @@ import { normalizePhone, parseCSV, renderTemplate, formatINRCompact } from "@/li
 
 describe("subsidy (PM Surya Ghar)", () => {
   it("pays 30k/kW for first 2 kW, 18k for 3rd, capped at 78k", () => {
-    expect(centralSubsidy(1, "RESIDENTIAL")).toBe(30000);
-    expect(centralSubsidy(2, "RESIDENTIAL")).toBe(60000);
-    expect(centralSubsidy(2.5, "RESIDENTIAL")).toBe(69000);
-    expect(centralSubsidy(3, "RESIDENTIAL")).toBe(78000);
-    expect(centralSubsidy(10, "RESIDENTIAL")).toBe(78000);
+    expect(centralSubsidy(1, "RESIDENTIAL", S.subsidyRates)).toBe(30000);
+    expect(centralSubsidy(2, "RESIDENTIAL", S.subsidyRates)).toBe(60000);
+    expect(centralSubsidy(2.5, "RESIDENTIAL", S.subsidyRates)).toBe(69000);
+    expect(centralSubsidy(3, "RESIDENTIAL", S.subsidyRates)).toBe(78000);
+    expect(centralSubsidy(10, "RESIDENTIAL", S.subsidyRates)).toBe(78000);
   });
   it("pays 18k/kW for housing societies and nothing for commercial", () => {
-    expect(centralSubsidy(20, "HOUSING_SOCIETY")).toBe(360000);
-    expect(centralSubsidy(600, "HOUSING_SOCIETY")).toBe(500 * 18000);
-    expect(centralSubsidy(50, "COMMERCIAL")).toBe(0);
+    expect(centralSubsidy(20, "HOUSING_SOCIETY", S.subsidyRates)).toBe(360000);
+    expect(centralSubsidy(600, "HOUSING_SOCIETY", S.subsidyRates)).toBe(500 * 18000);
+    expect(centralSubsidy(50, "COMMERCIAL", S.subsidyRates)).toBe(0);
   });
 });
 

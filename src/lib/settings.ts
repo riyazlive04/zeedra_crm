@@ -67,8 +67,44 @@ export const orgSettingsSchema = z.object({
       earthingKitEach: 1500,
     }),
 
-  // Subsidy — PM Surya Ghar Muft Bijli Yojana (central) + optional state top-up
+  // Subsidy — PM Surya Ghar Muft Bijli Yojana (central) + optional state top-up.
+  // Two claim types, each priced independently so an admin sets the rates once:
+  //  - House: per-kW tiers (e.g. ₹30k/kW up to 2 kW, ₹18k the 3rd kW), capped at a max amount.
+  //  - Community (housing society / RWA common facilities): a flat ₹/kW rate, capped at a max system size.
   centralSubsidyEnabled: z.boolean().default(true),
+  subsidyRates: z
+    .object({
+      house: z
+        .object({
+          tiers: z
+            .array(z.object({ uptoKw: z.number().positive(), ratePerKw: z.number().min(0) }))
+            .default([
+              { uptoKw: 2, ratePerKw: 30000 },
+              { uptoKw: 3, ratePerKw: 18000 },
+            ]),
+          maxAmount: z.number().min(0).default(78000),
+        })
+        .default({
+          tiers: [
+            { uptoKw: 2, ratePerKw: 30000 },
+            { uptoKw: 3, ratePerKw: 18000 },
+          ],
+          maxAmount: 78000,
+        }),
+      community: z
+        .object({ ratePerKw: z.number().min(0).default(18000), maxKw: z.number().positive().default(500) })
+        .default({ ratePerKw: 18000, maxKw: 500 }),
+    })
+    .default({
+      house: {
+        tiers: [
+          { uptoKw: 2, ratePerKw: 30000 },
+          { uptoKw: 3, ratePerKw: 18000 },
+        ],
+        maxAmount: 78000,
+      },
+      community: { ratePerKw: 18000, maxKw: 500 },
+    }),
   // Flat amount by system-size tier, e.g. Tamil Nadu G.O. 102: ₹5k (1 kW) / ₹10k (2 kW) / ₹22k (3 kW+)
   stateSubsidyTiers: z
     .array(z.object({ upToKw: z.number().positive(), amount: z.number().min(0) }))

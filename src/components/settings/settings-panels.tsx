@@ -7,7 +7,7 @@ import clsx from "clsx";
 import { Plus, Trash2, Copy, RefreshCw, CheckCircle2, XCircle, CalendarDays, MessageCircle, Sparkles, KeyRound, Globe, Clock } from "lucide-react";
 import { Avatar, Badge, Button, Card, CardHeader, Field } from "../ui";
 import { Modal } from "../modal";
-import { NumberInput, YesNo } from "../form-controls";
+import { NumberInput, Segmented, YesNo } from "../form-controls";
 import { api } from "@/lib/client";
 import { useToast } from "../toast";
 import type { OrgSettings } from "@/lib/settings";
@@ -81,6 +81,7 @@ type NumKey = { [K in keyof OrgSettings]: OrgSettings[K] extends number ? K : ne
 
 export function RulesPanel({ settings, section }: { settings: OrgSettings; section: "pricing" | "qualification" | "field" | "schedule" }) {
   const [s, setS] = useState<OrgSettings>(settings);
+  const [subsidyClaimType, setSubsidyClaimType] = useState<"house" | "community">("house");
   const { save, busy } = useSaver();
   const num = (k: NumKey, label: string, suffix?: string, hint?: string, prefix?: string) => (
     <Field label={label} hint={hint}>
@@ -133,9 +134,90 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
               </div>
             </div>
             <div className="grid gap-4 rounded-xl bg-emerald-50/60 p-4 sm:grid-cols-3">
-              <Field label="PM Surya Ghar central subsidy" hint="₹30k/kW up to 2 kW + ₹18k 3rd kW (max ₹78k); RWA ₹18k/kW" className="sm:col-span-3">
+              <Field label="PM Surya Ghar central subsidy" hint="Credited by the Government directly to the customer's bank account" className="sm:col-span-3">
                 <YesNo value={s.centralSubsidyEnabled} onChange={(v) => setS((x) => ({ ...x, centralSubsidyEnabled: v ?? true }))} yes="Enabled" no="Disabled" />
               </Field>
+              {s.centralSubsidyEnabled && (
+                <div className="sm:col-span-3">
+                  <div className="label mb-2">Claim type — rates are set once here and applied automatically from the lead/project segment</div>
+                  <Segmented
+                    value={subsidyClaimType}
+                    onChange={(v) => setSubsidyClaimType((v ?? "house") as "house" | "community")}
+                    options={[
+                      { value: "house", label: "House" },
+                      { value: "community", label: "Community" },
+                    ]}
+                  />
+                  {subsidyClaimType === "house" ? (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-slate-500">Residential rooftop (segment: Residential) — ₹/kW by system-size tier, capped at a max amount</p>
+                      {s.subsidyRates.house.tiers.map((tier, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <span className="w-16 text-slate-500">Up to</span>
+                          <div className="w-32">
+                            <NumberInput
+                              suffix="kW"
+                              value={tier.uptoKw}
+                              onChange={(v) =>
+                                setS((x) => ({
+                                  ...x,
+                                  subsidyRates: { ...x.subsidyRates, house: { ...x.subsidyRates.house, tiers: x.subsidyRates.house.tiers.map((t, j) => (j === i ? { ...t, uptoKw: v ?? 1 } : t)) } },
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="w-40">
+                            <NumberInput
+                              prefix="₹"
+                              suffix="/kW"
+                              value={tier.ratePerKw}
+                              onChange={(v) =>
+                                setS((x) => ({
+                                  ...x,
+                                  subsidyRates: { ...x.subsidyRates, house: { ...x.subsidyRates.house, tiers: x.subsidyRates.house.tiers.map((t, j) => (j === i ? { ...t, ratePerKw: v ?? 0 } : t)) } },
+                                }))
+                              }
+                            />
+                          </div>
+                          <button
+                            onClick={() =>
+                              setS((x) => ({ ...x, subsidyRates: { ...x.subsidyRates, house: { ...x.subsidyRates.house, tiers: x.subsidyRates.house.tiers.filter((_, j) => j !== i) } } }))
+                            }
+                            disabled={s.subsidyRates.house.tiers.length < 2}
+                            className="text-slate-400 hover:text-rose-600 disabled:opacity-30"
+                            aria-label="Remove tier"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <Button
+                        size="xs"
+                        onClick={() =>
+                          setS((x) => ({ ...x, subsidyRates: { ...x.subsidyRates, house: { ...x.subsidyRates.house, tiers: [...x.subsidyRates.house.tiers, { uptoKw: 10, ratePerKw: 0 }] } } }))
+                        }
+                      >
+                        <Plus className="h-3 w-3" /> Add tier
+                      </Button>
+                      <div className="w-48">
+                        <Field label="Capped at, per house">
+                          <NumberInput prefix="₹" value={s.subsidyRates.house.maxAmount} onChange={(v) => setS((x) => ({ ...x, subsidyRates: { ...x.subsidyRates, house: { ...x.subsidyRates.house, maxAmount: v ?? 0 } } }))} />
+                        </Field>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <p className="text-xs text-slate-500 sm:col-span-2">Housing society / RWA common facilities, incl. EV charging (segment: Housing society) — flat rate per kW, capped at a max system size</p>
+                      <Field label="Rate per kW">
+                        <NumberInput prefix="₹" value={s.subsidyRates.community.ratePerKw} onChange={(v) => setS((x) => ({ ...x, subsidyRates: { ...x.subsidyRates, community: { ...x.subsidyRates.community, ratePerKw: v ?? 0 } } }))} />
+                      </Field>
+                      <Field label="Capped at">
+                        <NumberInput suffix="kW" value={s.subsidyRates.community.maxKw} onChange={(v) => setS((x) => ({ ...x, subsidyRates: { ...x.subsidyRates, community: { ...x.subsidyRates.community, maxKw: v ?? 1 } } }))} />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="sm:col-span-3">
                 <div className="label">State top-up subsidy by system size (e.g. Tamil Nadu G.O. 102) — flat amount, not per-kW</div>
                 <div className="space-y-2">
