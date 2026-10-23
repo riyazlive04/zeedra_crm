@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import clsx from "clsx";
-import { Check, Hammer, IndianRupee } from "lucide-react";
+import { Check, Hammer, IndianRupee, UserCheck } from "lucide-react";
 import { Avatar, Badge, Button, Card, EmptyState, Field, ProgressBar } from "./ui";
 import { Modal } from "./modal";
 import { NumberInput } from "./form-controls";
@@ -13,6 +13,20 @@ import { api } from "@/lib/client";
 import { useToast } from "./toast";
 import { PROJECT_CHECKLIST, PROJECT_STAGES } from "@/lib/defaults";
 import { formatINR, formatINRCompact } from "@/lib/text";
+
+export interface WorkflowStep {
+  stage: string;
+  primaryUserId: string | null;
+  coordinatorUserId: string | null;
+  taskTitle: string;
+  dueInDays: number;
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+}
 
 export interface ProjectItem {
   id: string;
@@ -34,7 +48,19 @@ export interface ProjectItem {
 
 const idx = (s: string) => PROJECT_STAGES.findIndex((x) => x.key === s);
 
-export function ProjectsBoard({ projects, users, initialOpen }: { projects: ProjectItem[]; users: { id: string; name: string }[]; initialOpen?: string }) {
+export function ProjectsBoard({
+  projects,
+  users,
+  team,
+  workflow,
+  initialOpen,
+}: {
+  projects: ProjectItem[];
+  users: { id: string; name: string }[];
+  team: TeamMember[];
+  workflow: WorkflowStep[];
+  initialOpen?: string;
+}) {
   const [open, setOpen] = useState<string | null>(initialOpen ?? null);
   const [filter, setFilter] = useState<"active" | "subsidy" | "closed" | "all">("active");
   const list = projects.filter((p) =>
@@ -69,6 +95,7 @@ export function ProjectsBoard({ projects, users, initialOpen }: { projects: Proj
             const pct = Math.round(((i + 1) / PROJECT_STAGES.length) * 100);
             const docs = PROJECT_CHECKLIST.filter((c) => p.checklist[c.key]).length;
             const due = p.contractValue - p.amountReceived;
+            const responsible = team.find((u) => u.id === workflow.find((w) => w.stage === p.stage)?.primaryUserId);
             return (
               <button key={p.id} onClick={() => setOpen(p.id)} className="card p-4 text-left transition hover:shadow-pop">
                 <div className="flex items-start justify-between gap-2">
@@ -96,18 +123,24 @@ export function ProjectsBoard({ projects, users, initialOpen }: { projects: Proj
                   </Badge>
                   <Badge tone={due <= 0 ? "green" : "amber"}>{due <= 0 ? "Fully paid" : `${formatINRCompact(due)} due`}</Badge>
                   {p.portalAppId && <Badge tone="blue">Portal ✓</Badge>}
+                  {responsible && (
+                    <Badge tone="violet">
+                      <UserCheck className="mr-1 inline h-3 w-3" />
+                      {responsible.name}
+                    </Badge>
+                  )}
                 </div>
               </button>
             );
           })}
         </div>
       )}
-      {current && <ProjectModal p={current} users={users} onClose={() => setOpen(null)} />}
+      {current && <ProjectModal p={current} users={users} team={team} workflow={workflow} onClose={() => setOpen(null)} />}
     </>
   );
 }
 
-function ProjectModal({ p, users, onClose }: { p: ProjectItem; users: { id: string; name: string }[]; onClose: () => void }) {
+function ProjectModal({ p, users, team, workflow, onClose }: { p: ProjectItem; users: { id: string; name: string }[]; team: TeamMember[]; workflow: WorkflowStep[]; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const [checklist, setChecklist] = useState(p.checklist);
@@ -155,6 +188,7 @@ function ProjectModal({ p, users, onClose }: { p: ProjectItem; users: { id: stri
         </>
       }
     >
+      <ResponsibleBanner stage={p.stage} team={team} workflow={workflow} />
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <div>
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Execution stages</h4>
@@ -225,5 +259,30 @@ function ProjectModal({ p, users, onClose }: { p: ProjectItem; users: { id: stri
         </div>
       </div>
     </Modal>
+  );
+}
+
+function ResponsibleBanner({ stage, team, workflow }: { stage: string; team: TeamMember[]; workflow: WorkflowStep[] }) {
+  const step = workflow.find((w) => w.stage === stage);
+  const primary = step?.primaryUserId ? team.find((u) => u.id === step.primaryUserId) : null;
+  const coordinator = step?.coordinatorUserId ? team.find((u) => u.id === step.coordinatorUserId) : null;
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-sun-50 px-3.5 py-2.5 text-xs ring-1 ring-sun-200">
+      <UserCheck className="h-4 w-4 shrink-0 text-sun-700" />
+      {primary ? (
+        <span className="text-slate-700">
+          <span className="font-semibold text-slate-900">Responsible now:</span> {primary.name}
+          {coordinator && <> · Coordinating: {coordinator.name}</>}
+        </span>
+      ) : (
+        <span className="text-slate-500">
+          Nobody is configured for this stage yet —{" "}
+          <Link href="/settings?tab=workflow" className="font-medium text-sun-700 hover:underline">
+            set it in Settings → Project workflow
+          </Link>
+          .
+        </span>
+      )}
+    </div>
   );
 }

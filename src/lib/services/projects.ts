@@ -2,10 +2,34 @@ import "server-only";
 import type { Prisma, ProjectStage } from "@prisma/client";
 import { db } from "../db";
 import { nextProjectCode } from "../counter";
-import { logActivity } from "../activity";
+import { logActivity, notify } from "../activity";
 import { fireTrigger } from "../automation/engine";
 import { PROJECT_STAGES } from "../defaults";
+import { parseSettings } from "../settings";
 import type { Session } from "../session";
+
+/**
+ * Create the task (and notify) for whoever is configured as responsible for this stage in
+ * Settings → Project workflow. No-op if the stage has nobody assigned yet.
+ */
+async function assignStageTask(orgId: string, projectId: string, projectCode: string, leadId: string, leadName: string, stage: ProjectStage, stageLabel: string) {
+  const org = await db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { settings: true } });
+  const step = parseSettings(org.settings).projectWorkflow.find((w) => w.stage === stage);
+  if (!step?.primaryUserId) return;
+  const title = `${step.taskTitle.trim() || stageLabel} — ${leadName} (${projectCode})`;
+  await db.task.create({
+    data: {
+      organizationId: orgId,
+      leadId,
+      assignedToId: step.primaryUserId,
+      title,
+      dueAt: new Date(Date.now() + step.dueInDays * 86_400_000),
+    },
+  });
+  await notify(orgId, step.primaryUserId, stageLabel, `${leadName} · ${projectCode}`, `/projects?open=${projectId}`);
+  if (step.coordinatorUserId && step.coordinatorUserId !== step.primaryUserId)
+    await notify(orgId, step.coordinatorUserId, `Coordinating: ${stageLabel}`, `${leadName} · ${projectCode}`, `/projects?open=${projectId}`);
+}
 
 /** When a deal is won, open the installation project (idempotent). */
 export async function createProjectForLead(session: Session, leadId: string) {
@@ -30,11 +54,12 @@ export async function createProjectForLead(session: Session, leadId: string) {
   });
   if (q && q.status !== "ACCEPTED") await db.quotation.update({ where: { id: q.id }, data: { status: "ACCEPTED", acceptedAt: new Date() } });
   await logActivity({ orgId: lead.organizationId, leadId, userId: session.userId, type: "SYSTEM", title: `Installation project ${project.code} opened` });
+  await assignStageTask(lead.organizationId, project.id, project.code, leadId, lead.name, "BOOKING_CONFIRMED", PROJECT_STAGES[0].label);
   return project;
 }
 
 export async function moveProjectStage(session: Session, projectId: string, stage: ProjectStage) {
-  const p = await db.project.findFirstOrThrow({ where: { id: projectId, organizationId: session.orgId } });
+  const p = await db.project.findFirstOrThrow({ where: { id: projectId, organizationId: session.orgId }, include: { lead: { select: { name: true } } } });
   if (p.stage === stage) return p;
   const history = Array.isArray(p.stageHistory) ? (p.stageHistory as Prisma.JsonArray) : [];
   const label = PROJECT_STAGES.find((s) => s.key === stage)?.label ?? stage;
@@ -55,5 +80,6 @@ export async function moveProjectStage(session: Session, projectId: string, stag
     extra: { projectStage: stage },
     vars: { projectStage: label, projectCode: p.code },
   });
+  await assignStageTask(session.orgId, p.id, p.code, p.leadId, p.lead.name, stage, label);
   return updated;
 }

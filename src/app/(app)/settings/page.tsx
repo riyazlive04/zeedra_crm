@@ -8,7 +8,7 @@ import { aiEnabled } from "@/lib/ai";
 import { googleConfigured } from "@/lib/google-calendar";
 import { PageHeader } from "@/components/ui";
 import { BRAND } from "@/lib/brand";
-import { CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel } from "@/components/settings/settings-panels";
+import { CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel, WorkflowPanel } from "@/components/settings/settings-panels";
 
 export const metadata = { title: "Settings" };
 
@@ -18,6 +18,7 @@ const TABS = [
   ["qualification", "Qualification"],
   ["field", "GPS validation"],
   ["schedule", "Scheduling"],
+  ["workflow", "Project workflow"],
   ["team", "Team"],
   ["templates", "WhatsApp templates"],
   ["integrations", "Integrations"],
@@ -52,6 +53,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div className="min-w-0">
           {tab === "company" && <CompanyPanel org={org} />}
           {(tab === "pricing" || tab === "qualification" || tab === "field" || tab === "schedule") && <RulesPanel key={tab} settings={settings} section={tab} />}
+          {tab === "workflow" && (
+            <WorkflowPanel
+              settings={settings}
+              team={await db.user.findMany({ where: { organizationId: session.orgId, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })}
+            />
+          )}
           {tab === "team" && (
             <TeamPanel
               me={session.userId}

@@ -13,6 +13,7 @@ import { useToast } from "../toast";
 import type { OrgSettings } from "@/lib/settings";
 import { ROLE_LABEL } from "@/lib/rbac";
 import { ROLES } from "@/lib/validators";
+import { PROJECT_STAGES } from "@/lib/defaults";
 import { humanize, templateVariables, renderTemplate } from "@/lib/text";
 
 function useSaver() {
@@ -280,6 +281,80 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
       <div className="flex justify-end border-t border-slate-100 px-5 py-3">
         <Button variant="primary" loading={busy} onClick={() => save({ settings: s })}>
           Save changes
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/* ── Project workflow responsibilities ──────────────────────────────── */
+
+type WorkflowStep = OrgSettings["projectWorkflow"][number];
+
+export function WorkflowPanel({ settings, team }: { settings: OrgSettings; team: { id: string; name: string; role: string }[] }) {
+  const [rows, setRows] = useState<WorkflowStep[]>(() =>
+    PROJECT_STAGES.map((s) => settings.projectWorkflow.find((w) => w.stage === s.key) ?? { stage: s.key, primaryUserId: null, coordinatorUserId: null, taskTitle: "", dueInDays: 3 }),
+  );
+  const { save, busy } = useSaver();
+  const update = (i: number, patch: Partial<WorkflowStep>) => setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  const nameOf = (id: string | null) => (id ? team.find((u) => u.id === id)?.name : null);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Project workflow responsibilities"
+        subtitle="When a project reaches a stage, the primary responsible person automatically gets a task. Only Owner/Admin can change this."
+      />
+      <div className="divide-y divide-slate-100">
+        {PROJECT_STAGES.map((s, i) => {
+          const row = rows[i];
+          return (
+            <div key={s.key} className="grid gap-3 p-5 sm:grid-cols-[170px_1fr] sm:items-start">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">{s.label}</div>
+                <div className="text-[11px] text-slate-400">{s.hint}</div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Primary responsible">
+                  <select className="input" value={row.primaryUserId ?? ""} onChange={(e) => update(i, { primaryUserId: e.target.value || null })}>
+                    <option value="">Unassigned</option>
+                    {team.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} — {ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Coordinator (optional)">
+                  <select className="input" value={row.coordinatorUserId ?? ""} onChange={(e) => update(i, { coordinatorUserId: e.target.value || null })}>
+                    <option value="">None</option>
+                    {team.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} — {ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Task title" className="lg:col-span-1">
+                  <input className="input" value={row.taskTitle} onChange={(e) => update(i, { taskTitle: e.target.value })} placeholder={s.hint} />
+                </Field>
+                <Field label="Due in (days)">
+                  <NumberInput value={row.dueInDays} onChange={(v) => update(i, { dueInDays: v ?? 3 })} />
+                </Field>
+              </div>
+              {(row.primaryUserId || row.coordinatorUserId) && (
+                <div className="text-[11px] text-slate-400 sm:col-start-2">
+                  {row.primaryUserId && <>Primary: {nameOf(row.primaryUserId)}</>}
+                  {row.coordinatorUserId && <> · Coordinating: {nameOf(row.coordinatorUserId)}</>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-end border-t border-slate-100 px-5 py-3">
+        <Button variant="primary" loading={busy} onClick={() => save({ settings: { projectWorkflow: rows } }, "Workflow responsibilities saved")}>
+          Save workflow
         </Button>
       </div>
     </Card>

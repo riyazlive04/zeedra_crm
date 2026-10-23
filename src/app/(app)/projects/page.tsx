@@ -4,20 +4,24 @@ import { PageHeader, StatCard } from "@/components/ui";
 import { ProjectsBoard } from "@/components/projects-board";
 import { Hammer, Zap, Landmark, IndianRupee } from "lucide-react";
 import { formatINRCompact } from "@/lib/text";
+import { parseSettings } from "@/lib/settings";
 
 export const metadata = { title: "Installations" };
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ open?: string }> }) {
   const session = await requirePageSession("projects:manage");
   const { open } = await searchParams;
-  const [projects, users] = await Promise.all([
+  const [projects, users, team, org] = await Promise.all([
     db.project.findMany({
       where: { organizationId: session.orgId, ...(session.role === "INSTALLER" ? { managerId: session.userId } : {}) },
       orderBy: { updatedAt: "desc" },
       include: { lead: { select: { id: true, name: true, phone: true, city: true } }, manager: { select: { id: true, name: true, avatarColor: true } } },
     }),
     db.user.findMany({ where: { organizationId: session.orgId, active: true, role: { in: ["OWNER", "ADMIN", "SALES_MANAGER", "INSTALLER"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { organizationId: session.orgId, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
+    db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { settings: true } }),
   ]);
+  const workflow = parseSettings(org.settings).projectWorkflow;
   const active = projects.filter((p) => p.stage !== "CLOSED");
   const pendingSubsidy = projects.filter((p) => ["COMMISSIONED", "SUBSIDY_APPLIED"].includes(p.stage)).length;
   const receivable = projects.reduce((a, p) => a + Math.max(0, p.contractValue - p.amountReceived), 0);
@@ -34,6 +38,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       <ProjectsBoard
         initialOpen={open}
         users={users}
+        team={team}
+        workflow={workflow}
         projects={projects.map((p) => ({
           ...p,
           installDate: p.installDate?.toISOString() ?? null,

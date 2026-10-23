@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PROJECT_WORKFLOW_DEFAULTS } from "./defaults";
 
 /**
  * Tenant-level business configuration. Every number that differs between states,
@@ -107,6 +108,19 @@ export const orgSettingsSchema = z.object({
 
   // Lead routing
   autoAssign: z.enum(["NONE", "ROUND_ROBIN", "LEAST_LOADED"]).default("ROUND_ROBIN"),
+
+  // Project workflow responsibilities — who gets the task when a project enters each stage.
+  projectWorkflow: z
+    .array(
+      z.object({
+        stage: z.string(),
+        primaryUserId: z.string().nullable().default(null),
+        coordinatorUserId: z.string().nullable().default(null),
+        taskTitle: z.string().max(200).default(""),
+        dueInDays: z.number().int().min(1).max(30).default(3),
+      }),
+    )
+    .default(PROJECT_WORKFLOW_DEFAULTS),
 });
 
 export type OrgSettings = z.infer<typeof orgSettingsSchema>;

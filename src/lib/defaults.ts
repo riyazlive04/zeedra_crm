@@ -202,6 +202,24 @@ export const PROJECT_STAGES = [
   { key: "CLOSED", label: "Closed", hint: "Handover complete, AMC active" },
 ] as const;
 
+// Who gets the auto-assigned task when a project enters each stage — editable in Settings → Project workflow.
+// primaryUserId/coordinatorUserId default to null (unassigned) since user ids are per-tenant.
+export const PROJECT_WORKFLOW_DEFAULTS: { stage: string; taskTitle: string; dueInDays: number; primaryUserId: string | null; coordinatorUserId: string | null }[] = [
+  { stage: "BOOKING_CONFIRMED", taskTitle: "Call the customer, confirm booking and advance", dueInDays: 1, primaryUserId: null, coordinatorUserId: null },
+  { stage: "DOCUMENTATION", taskTitle: "Collect Aadhaar, EB bill, bank details and roof photos", dueInDays: 3, primaryUserId: null, coordinatorUserId: null },
+  { stage: "PORTAL_REGISTRATION", taskTitle: "Submit PM Surya Ghar portal application", dueInDays: 2, primaryUserId: null, coordinatorUserId: null },
+  { stage: "DISCOM_FEASIBILITY", taskTitle: "Follow up with DISCOM for feasibility approval", dueInDays: 5, primaryUserId: null, coordinatorUserId: null },
+  { stage: "DESIGN_APPROVED", taskTitle: "Finalise layout, SLD and BOM with customer sign-off", dueInDays: 2, primaryUserId: null, coordinatorUserId: null },
+  { stage: "MATERIAL_DISPATCHED", taskTitle: "Confirm material dispatch and site readiness", dueInDays: 2, primaryUserId: null, coordinatorUserId: null },
+  { stage: "INSTALLATION", taskTitle: "Complete installation and capture site/geo-tag photos", dueInDays: 3, primaryUserId: null, coordinatorUserId: null },
+  { stage: "NET_METER_APPLIED", taskTitle: "File net-meter application with DISCOM", dueInDays: 2, primaryUserId: null, coordinatorUserId: null },
+  { stage: "DISCOM_INSPECTION", taskTitle: "Coordinate DISCOM inspection and bi-directional meter fitting", dueInDays: 5, primaryUserId: null, coordinatorUserId: null },
+  { stage: "COMMISSIONED", taskTitle: "Upload commissioning certificate", dueInDays: 1, primaryUserId: null, coordinatorUserId: null },
+  { stage: "SUBSIDY_APPLIED", taskTitle: "Submit subsidy claim with customer bank details", dueInDays: 2, primaryUserId: null, coordinatorUserId: null },
+  { stage: "SUBSIDY_RECEIVED", taskTitle: "Confirm subsidy credited and notify customer", dueInDays: 2, primaryUserId: null, coordinatorUserId: null },
+  { stage: "CLOSED", taskTitle: "Final handover review and AMC enrolment", dueInDays: 1, primaryUserId: null, coordinatorUserId: null },
+];
+
 export const PROJECT_CHECKLIST = [
   { key: "aadhaar", label: "Aadhaar card" },
   { key: "ebBill", label: "Latest electricity bill" },
