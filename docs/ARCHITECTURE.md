@@ -1,6 +1,6 @@
 # Zeedra Solar — Architecture & Business Design
 
-*Solar CRM SaaS by Sirah Digital in collaboration with Zeedra Digital.*
+*Solar CRM SaaS by Sirah Digital.*
 
 This document covers the business analysis behind the product (who uses it, which pains it removes, how the sales process is modelled) and the technical architecture that implements it.
 

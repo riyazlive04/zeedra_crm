@@ -2,7 +2,7 @@
   "name": "sirah-zeedra-solar",
   "version": "1.0.0",
   "private": true,
-  "description": "Zeedra Solar — AI-powered CRM for solar installation companies. Built by Sirah Digital in collaboration with Zeedra Digital.",
+  "description": "Zeedra Solar — AI-powered CRM for solar installation companies. Built by Sirah Digital.",
   "author": "Sirah Digital × Zeedra Digital",
   "scripts": {
     "dev": "next dev --turbo",
