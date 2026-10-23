@@ -30,10 +30,10 @@ export const orgSettingsSchema = z.object({
   priceSlabs: z
     .array(z.object({ upToKw: z.number().positive(), ratePerKw: z.number().positive() }))
     .default([
-      { upToKw: 3, ratePerKw: 58000 },
-      { upToKw: 10, ratePerKw: 52000 },
-      { upToKw: 50, ratePerKw: 46000 },
-      { upToKw: 100000, ratePerKw: 40000 },
+      { upToKw: 3, ratePerKw: 60000 },
+      { upToKw: 10, ratePerKw: 54000 },
+      { upToKw: 50, ratePerKw: 47000 },
+      { upToKw: 100000, ratePerKw: 42000 },
     ]),
   gstRate: z.number().min(0).max(28).default(8.9), // composite: 70% goods @5% + 30% services @18%
   quotationValidityDays: z.number().int().positive().default(15),
