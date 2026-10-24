@@ -46,8 +46,7 @@ export function MarketingFooter() {
           Built by{" "}
           <a href={BRAND.builtByUrl} target="_blank" rel="noopener noreferrer" className="text-slate-300 underline-offset-2 hover:text-sun-300 hover:underline">
             {BRAND.builtBy}
-          </a>{" "}
-          × {BRAND.partner}
+          </a>
         </div>
       </div>
     </footer>

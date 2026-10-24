@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Zeedra Solar — AI-powered CRM for solar installation companies. Built by Sirah Digital.",
-  "author": "Sirah Digital × Zeedra Digital",
+  "author": "Sirah Digital",
   "scripts": {
     "dev": "next dev --turbo",
     "build": "prisma generate && next build",
@@ -19,6 +19,8 @@
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts",
     "test:ui": "node scripts/ui-check.mjs",
+    "guide:screenshots": "node scripts/guide-screenshots.mjs",
+    "guide:pdf": "node scripts/guide-pdfs.mjs",
     "db:postgres": "node scripts/set-db-provider.mjs postgresql",
     "db:sqlite": "node scripts/set-db-provider.mjs sqlite",
     "vercel-build": "node scripts/set-db-provider.mjs postgresql && prisma generate && prisma migrate deploy && next build"
@@ -49,6 +51,7 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "autoprefixer": "10.4.21",
+    "marked": "^18.1.1",
     "playwright": "^1.56.1",
     "postcss": "8.5.6",
     "prisma": "6.19.3",

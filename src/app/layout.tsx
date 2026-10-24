@@ -9,7 +9,7 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakart
 
 export const metadata: Metadata = {
   title: { default: `${BRAND.product} — Solar CRM`, template: `%s · ${BRAND.product}` },
-  description: `${BRAND.tagline}. Built by ${BRAND.credit}.`,
+  description: `${BRAND.tagline}. Built by ${BRAND.builtBy}.`,
   applicationName: BRAND.product,
   icons: { icon: "/icon.svg" },
 };

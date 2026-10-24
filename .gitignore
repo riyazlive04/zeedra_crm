@@ -16,3 +16,4 @@ npm-debug.log*
 .next-dev/
 /screenshots/
 !docs/user-guides/screenshots/
+docs/user-guides/._tmp-*.html

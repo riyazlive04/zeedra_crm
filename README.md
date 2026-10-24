@@ -1,6 +1,6 @@
 # ☀️ Zeedra Solar: AI-powered CRM for solar installers
 
-**Built by Sirah Digital in collaboration with Zeedra Digital.**
+**Built by Sirah Digital.**
 
 Zeedra Solar runs the whole rooftop-solar sales cycle for Indian EPCs, from the first enquiry to the PM Surya Ghar subsidy credit:
 
@@ -70,4 +70,4 @@ Next.js 15 · React 19 · TypeScript · Prisma 6 (PostgreSQL / SQLite) · Tailwi
 
 ---
 
-© Sirah Digital × Zeedra Digital. Product name and branding are configurable in `src/lib/brand.ts`.
+© Sirah Digital. Product name and branding are configurable in `src/lib/brand.ts`.
