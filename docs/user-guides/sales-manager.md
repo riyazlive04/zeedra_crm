@@ -109,6 +109,12 @@ Every quotation your team has created, with its status, price, system size, and 
 
 This is one of your most important screens. Click the **⚠ Flagged** tab to find quotes your field team created somewhere the app could not confirm as the customer's address. Open one to review the GPS details and approve or reject the flag.
 
+Click **+ New quotation** to quote someone who isn't in the system yet, for example a walk-in or a phone enquiry. Fill in their name, phone and bill right in the quote builder and a lead is created for them the moment you create the quotation, scored and assigned like any other lead. If that phone number already exists, the quote is simply added to the existing lead instead of making a duplicate.
+
+![Quotation detail](screenshots/sales-manager/08b-quotation-detail.png)
+
+If a price needs to change later, open the quotation and click **Revise**. The original is kept exactly as it was (handy if you already reviewed its location check), and the new version carries the same quote number with a revision mark. A **Version history** list shows every revision.
+
 ---
 
 ## Field Tracking
@@ -155,7 +161,7 @@ Settings is not in your sidebar, since pricing, team and integrations are manage
 
 ![My profile](screenshots/sales-manager/13-my-profile.png)
 
-Here you can update your details, connect your personal Google Calendar so your appointments sync automatically, and change your password.
+Here you can update your details, connect your personal Google Calendar so your appointments sync automatically, and change your password. You can also set a **Quick PIN login** so you can sign in faster on a device you use often, from the sign-in page click **Use a quick PIN instead**.
 
 ---
 

@@ -233,6 +233,8 @@ export const HELP_TOPICS: { key: HelpTopicKey; label: string; perm: HelpPerm; se
           <li>Use the <b>⚠ Flagged</b> tab to find quotes that could not be confirmed as created at the customer's site. Sales Managers and above can review these and approve or reject the flag.</li>
           <li>Open a quotation to print it, copy a shareable customer link, resend it on WhatsApp, or record whether the customer accepted it.</li>
           <li>From a lead's page, click <b>Quotation</b> to start a new one for that customer. Field Sales reps are taken to the on-site builder (which needs a GPS check); Sales Managers, Admins and the Owner can also create quotes directly from the office.</li>
+          <li>Sales Managers, Admins and the Owner can also click <b>+ New quotation</b> on this page to quote someone who isn't a lead yet. Fill in their name, phone and bill, and a lead is created for them automatically. If that phone number already exists, the quote is simply added to their existing lead.</li>
+          <li>Need to change a price after it was already sent? Open the quotation and click <b>Revise</b>. The original is kept exactly as it was (useful if a manager already reviewed it); the new version carries the same quote number with a revision mark, and a <b>Version history</b> list shows every revision.</li>
         </Bullets>
       </div>
     ),
@@ -306,13 +308,13 @@ export const HELP_TOPICS: { key: HelpTopicKey; label: string; perm: HelpPerm; se
         <P>Settings is where you configure how the business runs. Owners and Admins see every tab; everyone else only sees their own profile.</P>
         <Bullets>
           <li><b>Company</b>: your business name, contact details and logo, shown on proposals and WhatsApp messages.</li>
-          <li><b>Pricing & subsidy</b>, <b>Qualification</b>, <b>GPS validation</b> and <b>Scheduling</b>: the numbers and rules that drive every quotation, lead score and appointment slot.</li>
+          <li><b>Pricing & subsidy</b>, <b>Qualification</b>, <b>GPS validation</b> and <b>Scheduling</b>: the numbers and rules that drive every quotation, lead score and appointment slot. This includes the panel rate and per-component build costs every quote is priced from, an optional company margin, and (for Tamil Nadu) a switch to price bills using the exact TNEB bi-monthly slab table instead of a flat average rate.</li>
           <li><b>Project workflow</b>: who is responsible for each installation stage, and the default task created when a project reaches it.</li>
           <li><b>Team</b>: click <b>Add user</b> to invite a new team member. Give them a name, email, role and a temporary password, then share it with them. You can change anyone's role or deactivate them from the same screen.</li>
           <li><b>WhatsApp templates</b>: reusable message templates your team can send with one click.</li>
           <li><b>Integrations</b>: connect WhatsApp Cloud API, Google Calendar and the lead-capture webhook used by your website and ad forms.</li>
           <li><b>Billing & plan</b>: visible to the Owner only, this is where you manage your subscription.</li>
-          <li><b>My profile</b>: available to everyone from the person icon in the top right. Update your own details, connect your personal Google Calendar, or change your password.</li>
+          <li><b>My profile</b>: available to everyone from the person icon in the top right. Update your own details, connect your personal Google Calendar, change your password, or set a quick PIN so you can sign in faster next time.</li>
         </Bullets>
       </div>
     ),

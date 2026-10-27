@@ -114,6 +114,8 @@ Every quotation you have created, with its status and whether the location check
 
 If one of your quotes shows a warning icon, it was flagged by the location or time check. Your manager will review it, but it is worth double-checking you checked in correctly next time you are on site.
 
+If a customer asks for a better price after you've already sent a quote, open it and tap **Revise**. You can change the discount or set a new final price, the system size stays the same. The original is kept as it was, and the new version carries the same quote number with a revision mark.
+
 ---
 
 ## Solar Calculator

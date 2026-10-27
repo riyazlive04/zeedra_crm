@@ -156,9 +156,23 @@ Every solar proposal your team has created, with its status, price, system size,
 
 Use the **⚠ Flagged** tab to see quotes that could not be confirmed as created on site. Click a quotation to open it and review the details.
 
+### Quoting someone who isn't a lead yet
+
+Click **+ New quotation** at the top of the Quotations page. Instead of picking an existing lead, you get a **New customer** form right there: name, phone, address and their electricity bill. Fill it in, set up the system the same way you would for any other quote, and click **Create quotation**.
+
+![New quotation for a new customer](screenshots/owner/12b-new-quotation-new-customer.png)
+
+A lead is created for the customer automatically the moment the quotation is created, scored and assigned just like one entered through the Leads page. If a lead with that phone number already exists, the quotation is simply added to it instead of creating a duplicate, and you'll see a note telling you which existing customer it matched.
+
+### Opening a quotation
+
 ![Quotation detail](screenshots/owner/13-quotation-detail.png)
 
 From here you can print the quotation, copy a shareable customer link, resend it on WhatsApp, or review a flagged location check.
+
+### Revising a quotation
+
+If a price needs to change after a quote was already sent or reviewed, click **Revise** instead of editing it. You can set a new discount, type a different final price, or update the notes, system size stays the same. The original is kept exactly as it was, and the new version carries the same quote number with a revision mark (**Rev. 2**, **Rev. 3**, and so on). A **Version history** list on the quotation page shows every revision and which one is current.
 
 ---
 
@@ -222,9 +236,13 @@ Your business name, contact details, address, GSTIN and logo. This information s
 
 ### Pricing & subsidy
 
-The per-watt price, tariff, subsidy slabs and qualification thresholds that drive every quotation, lead score and instant estimate in the app.
+The rates and rules that drive every quotation, lead score and instant estimate in the app.
 
 ![Settings: Pricing & subsidy](screenshots/owner/20-settings-pricing.png)
+
+Every quotation is priced bottom-up: the panel rate (₹ per watt), the inverter catalogue below, and the per-kW balance-of-system rates (mounting, cabling, installation, and so on) are added up to get the system price, then a **Company margin** and GST are applied on top. Set **Company margin** to 0% for a straight passthrough quote, or a percentage if you want every quote to carry a margin automatically.
+
+If your business is in Tamil Nadu, turn on **TNEB slabs** at the top of this page. Instead of a flat average tariff, every bill the team enters is converted to units using the exact TANGEDCO bi-monthly telescopic rate table, so estimates match what the customer actually pays.
 
 ### Team
 
@@ -252,7 +270,7 @@ This tab is visible to you only. Manage your subscription plan and billing detai
 
 ### My profile
 
-Everyone, including you, can reach their own profile from the person icon in the top right corner. Update your details, connect your personal Google Calendar, or change your password.
+Everyone, including you, can reach their own profile from the person icon in the top right corner. Update your details, connect your personal Google Calendar, or change your password. You can also set a **Quick PIN login**, a short 4-6 digit code, so you can sign in faster on a device you use often. On the sign-in page, click **Use a quick PIN instead** and enter your email and PIN instead of your password.
 
 ---
 

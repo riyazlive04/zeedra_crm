@@ -105,6 +105,15 @@ async function captureOwner(browser) {
   await shot(page, folder, "12-quotations-list.png");
 
   try {
+    await page.click('a:has-text("New quotation")');
+    await page.waitForURL(/\/quotations\/new/);
+    await shot(page, folder, "12b-new-quotation-new-customer.png");
+  } catch {
+    console.log("  (skipped new-quotation-for-new-customer shot)");
+  }
+
+  await go(page, "/quotations");
+  try {
     await page.click("tbody tr:first-child a");
     await page.waitForURL(/\/quotations\/[^/]+$/);
     await shot(page, folder, "13-quotation-detail.png");
@@ -194,6 +203,14 @@ async function captureSalesManager(browser) {
 
   await go(page, "/quotations");
   await shot(page, folder, "08-quotations-list.png");
+
+  try {
+    await page.click("tbody tr:first-child a");
+    await page.waitForURL(/\/quotations\/[^/]+$/);
+    await shot(page, folder, "08b-quotation-detail.png");
+  } catch {
+    console.log("  (skipped quotation detail shot)");
+  }
 
   await go(page, "/tracking");
   await shot(page, folder, "09-field-tracking.png");
