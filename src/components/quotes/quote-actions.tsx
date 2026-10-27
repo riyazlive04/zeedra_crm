@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Printer, Send, CheckCircle2, XCircle, Link2, ShieldCheck } from "lucide-react";
-import { Button } from "../ui";
+import { Printer, Send, CheckCircle2, XCircle, Link2, ShieldCheck, FilePenLine } from "lucide-react";
+import { Button, Field } from "../ui";
 import { Modal } from "../modal";
+import { NumberInput } from "../form-controls";
 import { api } from "@/lib/client";
 import { useToast } from "../toast";
 
-export function QuoteActions({ id, status, shareToken, canAccept }: { id: string; status: string; shareToken: string | null; canAccept: boolean }) {
+export function QuoteActions({ id, status, shareToken, canAccept, canRevise }: { id: string; status: string; shareToken: string | null; canAccept: boolean; canRevise?: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -52,7 +53,74 @@ export function QuoteActions({ id, status, shareToken, canAccept }: { id: string
           </Button>
         </>
       )}
+      {canRevise && status !== "ACCEPTED" && <ReviseQuotation id={id} />}
     </div>
+  );
+}
+
+function ReviseQuotation({ id }: { id: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [discount, setDiscount] = useState<number | null>(null);
+  const [finalPrice, setFinalPrice] = useState<number | null>(null);
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const r = await api<{ quotation: { id: string; number: string } }>(`/api/quotations/${id}`, {
+        body: {
+          action: "revise",
+          discount: discount ?? undefined,
+          manualTotalOverride: finalPrice ?? undefined,
+          notes: notes || undefined,
+        },
+      });
+      toast.success(`Quotation ${r.quotation.number} revised`, "The original is kept as a snapshot; this new version is a fresh draft.");
+      setOpen(false);
+      router.push(`/quotations/${r.quotation.id}`);
+      router.refresh();
+    } catch (e) {
+      toast.error("Could not revise", e instanceof Error ? e.message : undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        <FilePenLine className="h-4 w-4" /> Revise
+      </Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Revise quotation"
+        subtitle="System size stays the same — change the discount, set a final negotiated price, or update notes. The current version is kept as-is."
+        footer={
+          <>
+            <Button onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="primary" onClick={submit} loading={busy}>
+              Create revision
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="New discount (pre-GST)" hint="Leave blank to keep the current discount">
+            <NumberInput prefix="₹" value={discount} onChange={setDiscount} placeholder="Unchanged" />
+          </Field>
+          <Field label="Set a final price" hint="Overrides the computed total — GST is backed out automatically">
+            <NumberInput prefix="₹" value={finalPrice} onChange={setFinalPrice} placeholder="Unchanged" />
+          </Field>
+          <Field label="Notes on the proposal">
+            <textarea className="input min-h-[64px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Leave blank to keep the current notes" />
+          </Field>
+        </div>
+      </Modal>
+    </>
   );
 }
 

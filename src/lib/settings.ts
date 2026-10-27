@@ -26,7 +26,9 @@ export const orgSettingsSchema = z.object({
   defaultPanelWattage: z.number().int().positive().default(550),
   defaultInverterBrand: z.string().default("Growatt"),
 
-  // Pricing (pre-GST, per kWp, slab by system size)
+  // Pricing (pre-GST, per kWp, slab by system size) — superseded by the bottom-up BoQ costing
+  // below (panelRatePerWatt + bomRates) as the subtotal driver; kept only so existing saved
+  // settings and the slab editor in Settings → Pricing keep working, and as a fallback rate.
   priceSlabs: z
     .array(z.object({ upToKw: z.number().positive(), ratePerKw: z.number().positive() }))
     .default([
@@ -35,8 +37,18 @@ export const orgSettingsSchema = z.object({
       { upToKw: 50, ratePerKw: 47000 },
       { upToKw: 100000, ratePerKw: 42000 },
     ]),
+  // Per-watt panel rate used for bottom-up BoQ costing (the primary subtotal driver).
+  panelRatePerWatt: z.number().positive().default(30),
+  // Company margin layered on the BoQ cost before GST, e.g. for a 0% "contractor passthrough"
+  // quote vs a margin-carrying retail quote. 0 by default — purely additive to existing pricing.
+  marginPct: z.number().min(0).max(100).default(0),
   gstRate: z.number().min(0).max(28).default(8.9), // composite: 70% goods @5% + 30% services @18%
   quotationValidityDays: z.number().int().positive().default(15),
+
+  // Use the exact TANGEDCO/TNEB telescopic bi-monthly tariff table (instead of the flat
+  // ₹/unit tariffPerUnit) to convert a customer's EB bill to units and back. Tamil Nadu only —
+  // leave off for other states, where tariffPerUnit's simple linear estimate is more appropriate.
+  tnebTariffEnabled: z.boolean().default(false),
 
   // Installation & balance-of-system build costs (₹/kW unless noted), used to itemise the BOM on every proposal
   bomRates: z

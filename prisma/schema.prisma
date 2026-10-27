@@ -76,6 +76,12 @@ model User {
   googleEmail        String?
   googleRefreshToken String?
   googleCalendarId   String? @default("primary")
+  // Quick PIN login — an alternate credential alongside the email+password account, for field
+  // staff signing in on a shared or personal device. Set by the user themself from their profile.
+  pinHash           String?
+  pinSetAt          DateTime?
+  lastPinDeviceId   String?
+  lastPinLoginAt    DateTime?
   lastLoginAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -420,6 +426,12 @@ model Quotation {
   appointmentId  String?
   status         QuotationStatus @default(DRAFT)
   version        Int             @default(1)
+  // Revisions: parentId always points at the original root quotation (never an intermediate
+  // revision), per version R1, R2, … — the quote's own `number` stays the same across revisions.
+  // supersededAt is set the moment a newer revision is created from this row, so "the current
+  // version" of a lineage is just WHERE (id = rootId OR parentId = rootId) AND supersededAt IS NULL.
+  parentId       String?
+  supersededAt   DateTime?
 
   // System design
   systemKw        Float
@@ -435,6 +447,8 @@ model Quotation {
   // Commercials
   subtotal        Float
   discount        Float   @default(0)
+  marginAmount    Float   @default(0)
+  manualOverride  Boolean @default(false)
   gstRate         Float
   gstAmount       Float
   totalAmount     Float
@@ -478,10 +492,14 @@ model Quotation {
   lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   createdBy    User         @relation(fields: [createdById], references: [id], onDelete: Cascade)
   appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  parent       Quotation?   @relation("QuotationRevisions", fields: [parentId], references: [id], onDelete: SetNull)
+  revisions    Quotation[]  @relation("QuotationRevisions")
 
-  @@unique([organizationId, number])
+  // Revisions of the same quote share `number`, so uniqueness is on the (number, version) pair.
+  @@unique([organizationId, number, version])
   @@index([organizationId, createdAt])
   @@index([organizationId, geoVerdict])
+  @@index([parentId])
 }
 
 model LocationPing {

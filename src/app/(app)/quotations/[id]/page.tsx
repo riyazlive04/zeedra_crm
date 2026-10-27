@@ -11,7 +11,7 @@ import { VerdictBadge, VERDICT_META } from "@/components/badges";
 import { ProposalDocument } from "@/components/quotes/proposal-document";
 import { QuoteActions, ReviewValidation } from "@/components/quotes/quote-actions";
 import { Map } from "@/components/map/map";
-import { humanize } from "@/lib/text";
+import { humanize, formatINR } from "@/lib/text";
 
 export const metadata = { title: "Quotation" };
 
@@ -33,8 +33,17 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
   ]);
   if (!q) notFound();
   const reviewer = can(session.role, "quotations:review");
-  if (!reviewer && q.createdById !== session.userId && q.lead.assignedToId !== session.userId) notFound();
+  const isOwner = q.createdById === session.userId || q.lead.assignedToId === session.userId;
+  if (!reviewer && !isOwner) notFound();
   const geo = (q.geoFlags as { checks?: { key: string; label: string; passed: boolean; detail: string }[] } | null)?.checks ?? [];
+
+  const rootId = q.parentId ?? q.id;
+  const revisions = await db.quotation.findMany({
+    where: { organizationId: session.orgId, OR: [{ id: rootId }, { parentId: rootId }] },
+    orderBy: { version: "desc" },
+    select: { id: true, version: true, status: true, totalAmount: true, supersededAt: true, createdAt: true },
+  });
+  const isLatest = !q.supersededAt;
 
   return (
     <div className="space-y-6">
@@ -45,6 +54,8 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
           </Link>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{q.number}</h1>
+            {q.version > 1 && <Badge tone="violet">Rev. {q.version}</Badge>}
+            {!isLatest && <Badge tone="slate">Superseded</Badge>}
             <Badge tone={q.status === "ACCEPTED" ? "green" : q.status === "SENT" ? "amber" : q.status === "DRAFT" ? "slate" : "rose"}>{humanize(q.status)}</Badge>
             <VerdictBadge value={q.geoVerdict} />
             {q.viewedAt && (
@@ -57,8 +68,17 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
             {q.lead.name} · {q.lead.code}
           </Link>
         </div>
-        <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} />
+        <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} />
       </div>
+      {!isLatest && (
+        <div className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This version was superseded by a later revision.{" "}
+          <Link href={`/quotations/${revisions.find((r) => !r.supersededAt)?.id ?? q.id}`} className="font-semibold underline">
+            View the current version
+          </Link>
+          .
+        </div>
+      )}
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_380px]">
         <ProposalDocument
@@ -68,6 +88,29 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
         />
 
         <div className="no-print space-y-4">
+          {revisions.length > 1 && (
+            <Card>
+              <CardHeader title="Version history" subtitle={`${revisions.length} version${revisions.length > 1 ? "s" : ""} of ${q.number}`} />
+              <ul className="divide-y divide-slate-100">
+                {revisions.map((r) => (
+                  <li key={r.id}>
+                    <Link href={`/quotations/${r.id}`} className={`flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-slate-50 ${r.id === q.id ? "bg-sun-50/40" : ""}`}>
+                      <div>
+                        <div className="text-sm font-medium text-slate-800">
+                          Rev. {r.version} {!r.supersededAt && <span className="ml-1 text-[11px] font-medium text-emerald-700">Current</span>}
+                        </div>
+                        <div className="text-xs text-slate-500">{format(r.createdAt, "d MMM yyyy, h:mm a")}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold tabular-nums text-slate-800">{formatINR(r.totalAmount)}</div>
+                        <div className="text-xs text-slate-500">{humanize(r.status)}</div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card>
             <CardHeader
               title="Who · where · when"

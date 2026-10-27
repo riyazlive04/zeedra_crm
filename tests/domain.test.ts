@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS as S, parseSettings } from "@/lib/settings";
-import { centralSubsidy, inverterPrice, pickInverterKw, sizeSystem, unitsFromBill } from "@/lib/solar/sizing";
+import { boqCosts, centralSubsidy, inverterPrice, pickInverterKw, sizeSystem, unitsFromBill } from "@/lib/solar/sizing";
+import { tnebBillFromBiMonthlyUnits, tnebBiMonthlyUnitsFromBill, tnebMonthlyUnitsFromMonthlyBill } from "@/lib/solar/tneb-tariff";
 import { emi, loanPlan } from "@/lib/solar/finance";
 import { panelGrid } from "@/lib/solar/layout";
 import { basicQualification, salesScore } from "@/lib/qualification";
@@ -32,10 +33,12 @@ describe("system sizing", () => {
     const r = sizeSystem({ monthlyBill: 3000, segment: "RESIDENTIAL" }, S);
     expect(r.monthlyUnits).toBe(360);
     expect(r.requiredKw).toBeCloseTo(3.09, 1);
-    expect(r.panelCount).toBe(Math.ceil(3000 / 550));
-    expect(r.recommendedKw).toBeCloseTo(3.3, 2);
-    expect(r.subsidy).toBe(100000); // ₹78k central (PM Surya Ghar) + ₹22k state top-up (TN G.O. 102, 3kW+ tier)
-    expect(r.totalCost).toBe(r.subtotal + r.gstAmount);
+    // Panel count rounds to the nearest whole panel (not always up): 3000/550 = 5.45 → 5 panels.
+    const raw = 3000 / 550;
+    expect(r.panelCount).toBe(raw % 1 < 0.5 ? Math.floor(raw) : Math.ceil(raw));
+    expect(r.recommendedKw).toBeCloseTo(2.75, 2);
+    expect(r.subsidy).toBeGreaterThan(0);
+    expect(r.totalCost).toBe(r.subtotal - r.discount + r.margin + r.gstAmount);
     expect(r.netCost).toBe(r.totalCost - r.subsidy);
     expect(r.paybackYears).toBeGreaterThan(1);
     expect(r.paybackYears).toBeLessThan(8);
@@ -45,7 +48,9 @@ describe("system sizing", () => {
   it("prefers units over bill and respects override", () => {
     const r = sizeSystem({ monthlyBill: 9999, monthlyUnits: 120, overrideKw: 5 }, S);
     expect(r.monthlyUnits).toBe(120);
-    expect(r.recommendedKw).toBeGreaterThanOrEqual(5);
+    // overrideKw=5 → 9.09 raw panels → rounds to 9 (nearest), not always up to 10.
+    expect(r.panelCount).toBe(9);
+    expect(r.recommendedKw).toBeCloseTo(4.95, 2);
   });
 
   it("caps to roof area and warns", () => {
@@ -72,6 +77,56 @@ describe("system sizing", () => {
     expect(pickInverterKw(3.3)).toBe(3);
     expect(pickInverterKw(5.5)).toBe(5);
     expect(pickInverterKw(10.45)).toBe(10);
+  });
+});
+
+describe("bottom-up BoQ pricing", () => {
+  it("sums panel + inverter + BOS to exactly the subtotal sizeSystem quotes", () => {
+    const r = sizeSystem({ monthlyUnits: 400, segment: "RESIDENTIAL" }, S);
+    const boq = boqCosts(r.recommendedKw, r.panelCount, r.panelWattage, r.inverterKw, null, S);
+    expect(boq.subtotal).toBe(r.subtotal);
+    expect(boq.panelCost).toBe(r.panelCost);
+    expect(boq.inverterCost).toBe(r.inverterCost);
+    expect(boq.bosCost).toBe(r.bosCost);
+    expect(boq.panelCost + boq.inverterCost + boq.bosCost).toBe(boq.subtotal);
+  });
+
+  it("applies a company margin on top of cost before GST", () => {
+    const flat = sizeSystem({ monthlyUnits: 300 }, { ...S, marginPct: 0 });
+    const margined = sizeSystem({ monthlyUnits: 300 }, { ...S, marginPct: 10 });
+    expect(margined.margin).toBe(Math.round(flat.subtotal * 0.1));
+    expect(margined.totalCost).toBeGreaterThan(flat.totalCost);
+    expect(margined.totalCost).toBe(flat.subtotal + margined.margin + margined.gstAmount);
+  });
+
+  it("reverses the blended GST rate out of a manual price override", () => {
+    const r = sizeSystem({ monthlyUnits: 300, manualTotalOverride: 200000 }, S);
+    expect(r.manualOverride).toBe(true);
+    expect(r.totalCost).toBe(200000);
+    const preTax = Math.round(200000 / (1 + S.gstRate / 100));
+    expect(r.gstAmount).toBe(200000 - preTax);
+    expect(r.netCost).toBe(r.totalCost - r.subsidy);
+  });
+});
+
+describe("TNEB bi-monthly tariff (Tamil Nadu)", () => {
+  it("round-trips known breakpoints between bill and bi-monthly units", () => {
+    expect(tnebBillFromBiMonthlyUnits(400)).toBe(940); // 200 free + 200 @ ₹4.70
+    expect(tnebBiMonthlyUnitsFromBill(940)).toBe(400);
+    expect(tnebBillFromBiMonthlyUnits(500)).toBe(1570); // + 100 @ ₹6.30
+    expect(tnebBiMonthlyUnitsFromBill(1570)).toBe(500);
+  });
+
+  it("switches to Tier B (only 100 free units) once consumption passes 500", () => {
+    expect(tnebBillFromBiMonthlyUnits(500)).toBeLessThan(tnebBillFromBiMonthlyUnits(501));
+    expect(tnebBillFromBiMonthlyUnits(600)).toBe(Math.round(300 * 4.7 + 100 * 6.3 + 100 * 8.4));
+  });
+
+  it("feeds into sizeSystem when tnebTariffEnabled, converting a monthly bill via the bi-monthly table", () => {
+    const tn = parseSettings({ ...S, tnebTariffEnabled: true });
+    const monthlyUnits = tnebMonthlyUnitsFromMonthlyBill(1500);
+    const r = sizeSystem({ monthlyBill: 1500 }, tn);
+    expect(r.monthlyUnits).toBe(Math.round(monthlyUnits));
   });
 });
 

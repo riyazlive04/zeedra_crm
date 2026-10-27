@@ -36,7 +36,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   const [org, me] = await Promise.all([
     db.organization.findUniqueOrThrow({ where: { id: session.orgId } }),
-    db.user.findUniqueOrThrow({ where: { id: session.userId }, select: { id: true, name: true, email: true, phone: true, googleEmail: true } }),
+    db.user.findUniqueOrThrow({ where: { id: session.userId }, select: { id: true, name: true, email: true, phone: true, googleEmail: true, pinSetAt: true } }),
   ]);
   const settings = parseSettings(org.settings);
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
@@ -87,7 +87,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             />
           )}
           {tab === "billing" && <BillingPanel />}
-          {tab === "profile" && <ProfilePanel user={me} googleOAuth={googleConfigured()} />}
+          {tab === "profile" && <ProfilePanel user={{ ...me, pinSetAt: me.pinSetAt?.toISOString() ?? null }} googleOAuth={googleConfigured()} />}
         </div>
       </div>
     </div>

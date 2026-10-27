@@ -27,7 +27,7 @@ export function SolarEstimate({ r, loan, dense }: { r: SizingResult; loan?: Loan
         </div>
       </div>
       <div className={`grid gap-2 ${dense ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"}`}>
-        {tile(<IndianRupee className="h-3.5 w-3.5" />, "System cost (incl. GST)", formatINR(r.totalCost), `GST ${formatINR(r.gstAmount)}`)}
+        {tile(<IndianRupee className="h-3.5 w-3.5" />, "System cost (incl. GST)", formatINR(r.totalCost), r.margin > 0 ? `GST ${formatINR(r.gstAmount)} · margin ${formatINR(r.margin)}` : r.manualOverride ? "Custom price" : `GST ${formatINR(r.gstAmount)}`)}
         {tile(<Landmark className="h-3.5 w-3.5 text-emerald-600" />, "PM Surya Ghar subsidy", <span className="text-emerald-700">− {formatINR(r.subsidy)}</span>, r.stateSubsidy ? `incl. state ${formatINR(r.stateSubsidy)}` : "Credited to customer")}
         {tile(<IndianRupee className="h-3.5 w-3.5 text-sun-600" />, "Net cost", <span className="text-sun-700">{formatINR(r.netCost)}</span>)}
         {tile(<TrendingUp className="h-3.5 w-3.5" />, "Monthly savings", formatINR(r.monthlySavings), `New bill ≈ ${formatINR(r.newMonthlyBill)}`)}

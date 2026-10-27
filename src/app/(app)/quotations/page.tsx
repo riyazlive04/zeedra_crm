@@ -1,11 +1,11 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { format } from "date-fns";
-import { FileText } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
 import { requirePageSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/rbac";
-import { Avatar, Badge, Card, EmptyState, PageHeader, StatCard } from "@/components/ui";
+import { Avatar, Badge, ButtonLink, Card, EmptyState, PageHeader, StatCard } from "@/components/ui";
 import { VerdictBadge } from "@/components/badges";
 import { formatINR, formatINRCompact, humanize } from "@/lib/text";
 
@@ -43,7 +43,17 @@ export default async function QuotationsPage({ searchParams }: { searchParams: P
 
   return (
     <div>
-      <PageHeader title="Quotations" subtitle="Every proposal with who created it, where and when." />
+      <PageHeader
+        title="Quotations"
+        subtitle="Every proposal with who created it, where and when."
+        actions={
+          can(session.role, "quotations:review") && (
+            <ButtonLink href="/quotations/new" variant="primary" size="sm">
+              <Plus className="h-4 w-4" /> New quotation
+            </ButtonLink>
+          )
+        }
+      />
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Open quotations" value={totals._count} hint={`${(totals._sum.systemKw ?? 0).toFixed(1)} kW`} icon={<FileText className="h-4 w-4" />} />
         <StatCard label="Open value" value={formatINRCompact(totals._sum.totalAmount ?? 0)} tone="violet" />

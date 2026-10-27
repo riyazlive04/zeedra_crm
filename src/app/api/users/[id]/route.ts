@@ -16,6 +16,7 @@ const schema = z.object({
   active: z.boolean().optional(),
   password: z.string().min(8).max(200).optional(),
   currentPassword: z.string().max(200).optional(),
+  pin: z.string().regex(/^\d{4,6}$/, "4-6 digit PIN").nullable().optional(),
 });
 
 /** Admins manage anyone; every user can edit their own name/phone/password. */
@@ -30,9 +31,10 @@ export const PATCH = route<{ id: string }>(null, async ({ req, session, params }
   if ((body.role || body.active !== undefined) && !admin) throw new ApiError(403, "Only admins can change roles or access");
   if (target.role === "OWNER" && (body.role && body.role !== "OWNER" || body.active === false)) throw new ApiError(400, "The owner account cannot be demoted or deactivated");
   if (body.role === "OWNER") throw new ApiError(400, "Ownership transfer is handled by support");
-  if (body.password && self) {
+  if ((body.password || body.pin !== undefined) && self) {
     if (!body.currentPassword || !(await verifyPassword(body.currentPassword, target.passwordHash))) throw new ApiError(400, "Current password is incorrect");
   }
+  if (body.pin !== undefined && !self) throw new ApiError(403, "A PIN can only be set by its own owner");
 
   const updated = await db.user.update({
     where: { id: target.id },
@@ -43,6 +45,8 @@ export const PATCH = route<{ id: string }>(null, async ({ req, session, params }
       territory: body.territory,
       active: body.active,
       passwordHash: body.password ? await hashPassword(body.password) : undefined,
+      pinHash: body.pin !== undefined ? (body.pin ? await hashPassword(body.pin) : null) : undefined,
+      pinSetAt: body.pin !== undefined ? (body.pin ? new Date() : null) : undefined,
     },
     select: { id: true, name: true, email: true, role: true, active: true },
   });

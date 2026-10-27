@@ -102,8 +102,11 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
         <>
           <CardHeader title="Pricing, tariff & subsidy" subtitle="Drives every estimate, quotation and WhatsApp message" />
           <div className="space-y-6 p-5">
+            <Field label="Tamil Nadu TNEB tariff table" hint="Use the exact TANGEDCO bi-monthly telescopic slabs to convert EB bill ↔ units, instead of the flat average tariff below">
+              <YesNo value={s.tnebTariffEnabled} onChange={(v) => setS((x) => ({ ...x, tnebTariffEnabled: v ?? false }))} yes="TNEB slabs" no="Flat tariff" />
+            </Field>
             <div className="grid gap-4 sm:grid-cols-3">
-              {num("tariffPerUnit", "Avg. tariff", "₹/unit")}
+              {num("tariffPerUnit", "Avg. tariff", "₹/unit", s.tnebTariffEnabled ? "Unused while TNEB slabs are on" : undefined)}
               {num("fixedChargesMonthly", "Fixed charges", "₹/month")}
               {num("exportTariffPerUnit", "Net-meter export rate", "₹/unit")}
               {num("specificYield", "Specific yield", "kWh/kWp/yr", "1,350–1,550 across India")}
@@ -244,8 +247,16 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
               </div>
             </div>
             <div>
+              <div className="label">Panel rate & company margin</div>
+              <p className="mb-2 text-xs text-slate-500">The system price is built bottom-up: panels priced per watt, the inverter from the catalogue below, and balance-of-system from the rates further down — summed, then a margin and GST on top. The "Price per kWp" slabs above no longer drive pricing; they're kept only as a quick reference.</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {num("panelRatePerWatt", "Panel rate", "₹/Wp")}
+                {num("marginPct", "Company margin", "%", "Added on cost before GST — 0 for a passthrough quote")}
+              </div>
+            </div>
+            <div>
               <div className="label">Installation & balance-of-system rates</div>
-              <p className="mb-2 text-xs text-slate-500">Per-kW build costs used to itemise the bill of materials on every proposal. Panels (52%) and the inverter (priced from the catalogue below) come off the system price first; everything here fills the rest, scaled to match.</p>
+              <p className="mb-2 text-xs text-slate-500">Per-kW build costs, each priced independently and summed into the quoted total and the itemised bill of materials on every proposal.</p>
               <div className="grid gap-4 sm:grid-cols-3">
                 {bomNum("mountingPerKw", "Mounting structure", "/kW")}
                 {bomNum("dcdbPerKw", "DCDB", "/kW")}
@@ -896,11 +907,20 @@ function TemplateEditor({ t, onClose }: { t: Template | null; onClose: () => voi
 
 /* ── Profile ─────────────────────────────────────────────────────────── */
 
-export function ProfilePanel({ user, googleOAuth }: { user: { id: string; name: string; email: string; phone: string | null; googleEmail: string | null }; googleOAuth: boolean }) {
+export function ProfilePanel({
+  user,
+  googleOAuth,
+}: {
+  user: { id: string; name: string; email: string; phone: string | null; googleEmail: string | null; pinSetAt: string | null };
+  googleOAuth: boolean;
+}) {
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone ?? "");
   const [cur, setCur] = useState("");
   const [pw, setPw] = useState("");
+  const [pinCur, setPinCur] = useState("");
+  const [pin, setPin] = useState("");
+  const [hasPin, setHasPin] = useState(Boolean(user.pinSetAt));
   const { save, busy } = useSaver();
   return (
     <div className="space-y-4">
@@ -947,6 +967,50 @@ export function ProfilePanel({ user, googleOAuth }: { user: { id: string; name: 
             }}
           >
             Update password
+          </Button>
+        </div>
+      </Card>
+      <Card>
+        <CardHeader title="Quick PIN login" subtitle={hasPin ? "Set — you can sign in with your email and this PIN instead of your password." : "Not set. A short PIN lets you sign in faster on a device you use often."} icon={<KeyRound className="h-4 w-4" />} />
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <Field label="Current password" hint="Required to change your PIN">
+            <input className="input" type="password" value={pinCur} onChange={(e) => setPinCur(e.target.value)} autoComplete="current-password" />
+          </Field>
+          <Field label={hasPin ? "New PIN" : "Set a PIN"} hint="4-6 digits">
+            <input className="input tracking-[0.3em]" type="password" inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} placeholder="••••" />
+          </Field>
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
+          {hasPin ? (
+            <Button
+              loading={busy}
+              className="text-rose-700"
+              onClick={async () => {
+                if (await save({ pin: null, currentPassword: pinCur }, "PIN removed", `/api/users/${user.id}`)) {
+                  setHasPin(false);
+                  setPin("");
+                  setPinCur("");
+                }
+              }}
+            >
+              Remove PIN
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={pin.length < 4}
+            onClick={async () => {
+              if (await save({ pin, currentPassword: pinCur }, "PIN saved", `/api/users/${user.id}`)) {
+                setHasPin(true);
+                setPin("");
+                setPinCur("");
+              }
+            }}
+          >
+            {hasPin ? "Update PIN" : "Set PIN"}
           </Button>
         </div>
       </Card>

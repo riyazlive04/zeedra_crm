@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { Crosshair, Loader2, ShieldCheck, ShieldAlert, MapPin, Send, FileText, Building2, CheckCircle2, XCircle } from "lucide-react";
+import { Crosshair, Loader2, ShieldCheck, ShieldAlert, MapPin, Send, FileText, Building2, CheckCircle2, XCircle, UserPlus } from "lucide-react";
 import { Button, Card, CardHeader, Field, Badge } from "../ui";
 import { NumberInput, Segmented, YesNo } from "../form-controls";
 import { SolarEstimate } from "../solar-estimate";
@@ -16,6 +16,8 @@ import { sizeSystem, type SegmentKey } from "@/lib/solar/sizing";
 import { loanPlan } from "@/lib/solar/finance";
 import { haversineM, formatDistance } from "@/lib/geo";
 import type { OrgSettings } from "@/lib/settings";
+import { SOURCES, SEGMENTS } from "@/lib/validators";
+import { humanize } from "@/lib/text";
 import { format } from "date-fns";
 
 interface LeadLite {
@@ -41,16 +43,34 @@ interface Check {
   detail: string;
 }
 
+interface NewCustomer {
+  name: string;
+  phone: string;
+  email: string;
+  source: string;
+  segment: SegmentKey;
+  address: string;
+  city: string;
+  pincode: string;
+  monthlyBill: number | null;
+  monthlyUnits: number | null;
+  assignedToId: string;
+}
+
 export function QuoteBuilder({
   lead,
   settings,
   mode,
   appointment,
+  users = [],
+  canAssign = false,
 }: {
-  lead: LeadLite;
+  lead: LeadLite | null;
   settings: OrgSettings;
   mode: "FIELD" | "OFFICE";
   appointment: { id: string; startAt: string; endAt: string } | null;
+  users?: { id: string; name: string; role: string }[];
+  canAssign?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -63,28 +83,59 @@ export function QuoteBuilder({
   const [inverterBrand, setInverterBrand] = useState(settings.defaultInverterBrand);
   const [structure, setStructure] = useState("Hot-dip galvanised elevated");
   const [discount, setDiscount] = useState<number | null>(null);
-  const [loanOn, setLoanOn] = useState<boolean | null>(lead.paymentMode === "LOAN" || lead.paymentMode === "PARTIAL_LOAN");
+  const [manualFinalPrice, setManualFinalPrice] = useState<number | null>(null);
+  const [loanOn, setLoanOn] = useState<boolean | null>(lead?.paymentMode === "LOAN" || lead?.paymentMode === "PARTIAL_LOAN");
   const [tenure, setTenure] = useState(settings.loanTenureMonths);
   const [rate, setRate] = useState<number | null>(settings.loanRatePct);
   const [down, setDown] = useState<number | null>(settings.loanDownPaymentPct);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<null | { id: string; number: string; verdict: string; checks: Check[]; distance: number | null }>(null);
+  const [result, setResult] = useState<null | {
+    id: string;
+    number: string;
+    verdict: string;
+    checks: Check[];
+    distance: number | null;
+    leadId: string;
+    leadName: string;
+    leadCreated: boolean;
+    leadDuplicate: boolean;
+  }>(null);
   const [sending, setSending] = useState(false);
+  const [customer, setCustomer] = useState<NewCustomer>({
+    name: "", phone: "", email: "", source: "WALK_IN", segment: "RESIDENTIAL", address: "", city: "", pincode: "",
+    monthlyBill: null, monthlyUnits: null, assignedToId: "",
+  });
+  const setC = <K extends keyof NewCustomer>(k: K, v: NewCustomer[K]) => setCustomer((x) => ({ ...x, [k]: v }));
 
-  const site = lead.lat != null && lead.lng != null ? { lat: lead.lat, lng: lead.lng } : null;
+  const site = lead?.lat != null && lead?.lng != null ? { lat: lead.lat, lng: lead.lng } : null;
   const previewDistance = fix && site ? Math.round(haversineM(fix, site)) : null;
   const previewOk = previewDistance != null && previewDistance <= settings.geofenceRadiusM + Math.min(fix?.accuracyM ?? 0, settings.geofenceRadiusM / 2) && (fix?.accuracyM ?? 999) <= settings.maxGpsAccuracyM;
 
+  const billSource = lead ? lead.monthlyBill : customer.monthlyBill;
+  const unitsSource = lead ? lead.monthlyUnits : customer.monthlyUnits;
+  const segmentSource = lead ? lead.segment : customer.segment;
+
   const sizing = useMemo(
     () =>
-      lead.monthlyBill || lead.monthlyUnits || kw
+      billSource || unitsSource || kw
         ? sizeSystem(
-            { monthlyBill: lead.monthlyBill, monthlyUnits: lead.monthlyUnits, segment: lead.segment, roofAreaSqft: kw ? null : lead.roofAreaSqft, sanctionedLoadKw: lead.sanctionedLoadKw, phase: lead.phase, overrideKw: kw, panelWattage, discount: discount ?? 0 },
+            {
+              monthlyBill: billSource,
+              monthlyUnits: unitsSource,
+              segment: segmentSource,
+              roofAreaSqft: kw ? null : (lead?.roofAreaSqft ?? null),
+              sanctionedLoadKw: lead?.sanctionedLoadKw ?? null,
+              phase: lead?.phase ?? null,
+              overrideKw: kw,
+              panelWattage,
+              discount: discount ?? 0,
+              manualTotalOverride: manualFinalPrice,
+            },
             settings,
           )
         : null,
-    [lead, kw, panelWattage, discount, settings],
+    [billSource, unitsSource, segmentSource, lead, kw, panelWattage, discount, manualFinalPrice, settings],
   );
   const loan = sizing && loanOn ? loanPlan(sizing.netCost, sizing.monthlySavings, rate ?? settings.loanRatePct, tenure, down ?? 0) : null;
 
@@ -102,6 +153,7 @@ export function QuoteBuilder({
 
   async function submit() {
     if (!sizing) return toast.error("Add the customer's bill or a system size first");
+    if (!lead && (!customer.name.trim() || customer.phone.trim().length < 10)) return toast.error("Enter the customer's name and mobile number first");
     setSaving(true);
     try {
       let capture: GeoFix | null = null;
@@ -112,9 +164,31 @@ export function QuoteBuilder({
         });
         setFix(capture);
       }
-      const r = await api<{ quotation: { id: string; number: string; geoVerdict: string; distanceFromSiteM: number | null }; validation: { checks: Check[] } | null }>("/api/quotations", {
+      const r = await api<{
+        quotation: { id: string; number: string; geoVerdict: string; distanceFromSiteM: number | null };
+        validation: { checks: Check[] } | null;
+        lead: { id: string; name: string; code: string };
+        leadCreated: boolean;
+        leadDuplicate: boolean;
+      }>("/api/quotations", {
         body: {
-          leadId: lead.id,
+          ...(lead
+            ? { leadId: lead.id }
+            : {
+                newLead: {
+                  name: customer.name,
+                  phone: customer.phone,
+                  email: customer.email || null,
+                  source: customer.source,
+                  segment: customer.segment,
+                  address: customer.address || null,
+                  city: customer.city || null,
+                  pincode: customer.pincode || null,
+                  monthlyBill: customer.monthlyBill,
+                  monthlyUnits: customer.monthlyUnits,
+                  assignedToId: customer.assignedToId || null,
+                },
+              }),
           appointmentId: appointment?.id ?? null,
           mode,
           systemKw: kw,
@@ -123,14 +197,26 @@ export function QuoteBuilder({
           inverterBrand,
           structureType: structure,
           discount: discount ?? 0,
+          manualTotalOverride: manualFinalPrice,
           loan: loanOn ? { enabled: true, tenureMonths: tenure, ratePct: rate ?? settings.loanRatePct, downPaymentPct: down ?? 0 } : undefined,
           notes: notes || null,
           capture,
         },
       });
-      setResult({ id: r.quotation.id, number: r.quotation.number, verdict: r.quotation.geoVerdict, checks: r.validation?.checks ?? [], distance: r.quotation.distanceFromSiteM });
-      if (r.quotation.geoVerdict === "VERIFIED" || r.quotation.geoVerdict === "OFFICE_CREATED") toast.success(`Quotation ${r.quotation.number} created`);
-      else toast.info(`Quotation ${r.quotation.number} created — flagged for review`, VERDICT_META[r.quotation.geoVerdict]?.help);
+      setResult({
+        id: r.quotation.id,
+        number: r.quotation.number,
+        verdict: r.quotation.geoVerdict,
+        checks: r.validation?.checks ?? [],
+        distance: r.quotation.distanceFromSiteM,
+        leadId: r.lead.id,
+        leadName: r.lead.name,
+        leadCreated: r.leadCreated,
+        leadDuplicate: r.leadDuplicate,
+      });
+      if (r.quotation.geoVerdict === "VERIFIED" || r.quotation.geoVerdict === "OFFICE_CREATED") {
+        toast.success(`Quotation ${r.quotation.number} created`, r.leadDuplicate ? `Matched an existing customer — ${r.lead.name} (${r.lead.code}).` : r.leadCreated ? `New lead ${r.lead.code} created for ${r.lead.name}.` : undefined);
+      } else toast.info(`Quotation ${r.quotation.number} created — flagged for review`, VERDICT_META[r.quotation.geoVerdict]?.help);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       toast.error("Could not create quotation", e instanceof Error ? e.message : undefined);
@@ -188,8 +274,8 @@ export function QuoteBuilder({
             </Link>
           </div>
         </Card>
-        <Link href={`/leads/${lead.id}`} className="block text-center text-sm text-slate-500 hover:text-slate-800">
-          Back to {lead.name}
+        <Link href={`/leads/${result.leadId}`} className="block text-center text-sm text-slate-500 hover:text-slate-800">
+          Back to {result.leadName}
         </Link>
       </div>
     );
@@ -198,6 +284,62 @@ export function QuoteBuilder({
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
       <div className="space-y-6">
+        {!lead && (
+          <Card>
+            <CardHeader title="New customer" subtitle="No lead yet — one is created automatically with this quotation" icon={<UserPlus className="h-4 w-4" />} />
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <Field label="Full name *">
+                <input className="input" required value={customer.name} onChange={(e) => setC("name", e.target.value)} placeholder="e.g. Ravi Kumar" />
+              </Field>
+              <Field label="Mobile (WhatsApp) *">
+                <input className="input" required inputMode="tel" value={customer.phone} onChange={(e) => setC("phone", e.target.value)} placeholder="98765 43210" />
+              </Field>
+              <Field label="Email">
+                <input className="input" type="email" value={customer.email} onChange={(e) => setC("email", e.target.value)} />
+              </Field>
+              <Field label="Source">
+                <select className="input" value={customer.source} onChange={(e) => setC("source", e.target.value)}>
+                  {SOURCES.map((s) => (
+                    <option key={s} value={s}>
+                      {humanize(s)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Segment" className="sm:col-span-2">
+                <Segmented value={customer.segment} onChange={(v) => setC("segment", (v ?? "RESIDENTIAL") as SegmentKey)} options={SEGMENTS.map((s) => ({ value: s, label: humanize(s) }))} />
+              </Field>
+              <Field label="Address" className="sm:col-span-2">
+                <input className="input" value={customer.address} onChange={(e) => setC("address", e.target.value)} placeholder="Door no, street, area" />
+              </Field>
+              <Field label="City">
+                <input className="input" value={customer.city} onChange={(e) => setC("city", e.target.value)} />
+              </Field>
+              <Field label="PIN code">
+                <input className="input" inputMode="numeric" maxLength={6} value={customer.pincode} onChange={(e) => setC("pincode", e.target.value.replace(/\D/g, ""))} />
+              </Field>
+              <Field label="Monthly EB bill" hint="Used to size the system — or enter a system size below">
+                <NumberInput prefix="₹" value={customer.monthlyBill} onChange={(v) => setC("monthlyBill", v)} placeholder="2500" />
+              </Field>
+              <Field label="Monthly units" hint="Optional — more accurate than bill">
+                <NumberInput suffix="kWh" value={customer.monthlyUnits} onChange={(v) => setC("monthlyUnits", v)} />
+              </Field>
+              {canAssign && (
+                <Field label="Assign to" hint="Leave blank for automatic round-robin" className="sm:col-span-2">
+                  <select className="input" value={customer.assignedToId} onChange={(e) => setC("assignedToId", e.target.value)}>
+                    <option value="">Auto-assign</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} · {humanize(u.role)}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+            </div>
+          </Card>
+        )}
+
         {mode === "FIELD" ? (
           <Card>
             <CardHeader
@@ -248,9 +390,9 @@ export function QuoteBuilder({
         )}
 
         <Card>
-          <CardHeader title="System configuration" subtitle={`${lead.name} · ${lead.code}`} />
+          <CardHeader title="System configuration" subtitle={lead ? `${lead.name} · ${lead.code}` : customer.name || "New customer"} />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
-            <Field label="System size" hint={sizing ? `Recommended ${sizeSystem({ monthlyBill: lead.monthlyBill, monthlyUnits: lead.monthlyUnits, segment: lead.segment, roofAreaSqft: lead.roofAreaSqft }, settings).recommendedKw} kW from the bill` : "Enter kW"}>
+            <Field label="System size" hint={sizing && (billSource || unitsSource) ? `Recommended ${sizeSystem({ monthlyBill: billSource, monthlyUnits: unitsSource, segment: segmentSource, roofAreaSqft: lead?.roofAreaSqft ?? null }, settings).recommendedKw} kW from the bill` : "Enter kW"}>
               <NumberInput suffix="kW" value={kw} onChange={setKw} placeholder="Auto" />
             </Field>
             <Field label="Panel wattage">
@@ -279,6 +421,9 @@ export function QuoteBuilder({
             </Field>
             <Field label="Discount (pre-GST)">
               <NumberInput prefix="₹" value={discount} onChange={setDiscount} placeholder="0" />
+            </Field>
+            <Field label="Set a final price" hint="Overrides the computed total — GST is backed out automatically" className="sm:col-span-2">
+              <NumberInput prefix="₹" value={manualFinalPrice} onChange={setManualFinalPrice} placeholder="Use the computed price" />
             </Field>
             <Field label="Include loan / EMI plan?" className="sm:col-span-2">
               <YesNo value={loanOn} onChange={setLoanOn} />
@@ -311,7 +456,11 @@ export function QuoteBuilder({
 
       <div className="space-y-4 xl:sticky xl:top-20 xl:self-start">
         <Card className="p-4">
-          {sizing ? <SolarEstimate r={sizing} loan={loan} dense /> : <p className="p-6 text-center text-sm text-slate-500">Enter a system size — this lead has no bill data yet.</p>}
+          {sizing ? (
+            <SolarEstimate r={sizing} loan={loan} dense />
+          ) : (
+            <p className="p-6 text-center text-sm text-slate-500">{lead ? "Enter a system size — this lead has no bill data yet." : "Enter the customer's bill or a system size to see numbers."}</p>
+          )}
         </Card>
         <Button variant="primary" size="lg" className="w-full" onClick={submit} loading={saving} disabled={!sizing}>
           {mode === "FIELD" ? <Crosshair className="h-4 w-4" /> : <FileText className="h-4 w-4" />}

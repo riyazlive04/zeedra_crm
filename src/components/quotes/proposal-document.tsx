@@ -21,6 +21,9 @@ export interface ProposalData {
   lineItems: unknown;
   subtotal: number;
   discount: number;
+  marginAmount: number;
+  manualOverride: boolean;
+  version: number;
   gstRate: number;
   gstAmount: number;
   totalAmount: number;
@@ -68,7 +71,10 @@ export function ProposalDocument({ q, escalationPct = 3, degradationPct = 0.5 }:
           </div>
           <div className="text-right">
             <div className="text-[11px] font-semibold uppercase tracking-widest text-sun-300">Rooftop Solar Proposal</div>
-            <div className="font-display text-2xl font-bold">{q.number}</div>
+            <div className="font-display text-2xl font-bold">
+              {q.number}
+              {q.version > 1 && <span className="ml-2 align-middle text-sm font-medium text-sun-300">Rev. {q.version}</span>}
+            </div>
             <div className="mt-1 text-xs text-slate-400">
               Issued {format(q.createdAt, "d MMM yyyy")} · Valid till {format(q.validUntil, "d MMM yyyy")}
             </div>
@@ -147,8 +153,10 @@ export function ProposalDocument({ q, escalationPct = 3, degradationPct = 0.5 }:
             <dl className="space-y-1.5 text-sm">
               <Row l="System price" v={formatINR(q.subtotal)} />
               {q.discount > 0 && <Row l="Discount" v={`− ${formatINR(q.discount)}`} className="text-emerald-700" />}
+              {q.marginAmount > 0 && <Row l="Margin" v={formatINR(q.marginAmount)} />}
               <Row l={`GST (${q.gstRate}% composite)`} v={formatINR(q.gstAmount)} />
               <Row l="Total project cost" v={formatINR(q.totalAmount)} bold />
+              {q.manualOverride && <p className="text-[11px] text-slate-400">Final price set directly for this quotation.</p>}
               <Row l="PM Surya Ghar subsidy (credited to you)" v={`− ${formatINR(q.subsidyAmount)}`} className="text-emerald-700" />
               <div className="mt-2 flex items-center justify-between rounded-xl bg-sun-50 px-3 py-2.5">
                 <dt className="font-semibold text-sun-900">Effective net cost</dt>

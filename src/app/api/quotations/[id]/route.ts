@@ -7,7 +7,7 @@ import { ApiError } from "@/lib/errors";
 import { can } from "@/lib/rbac";
 import { logActivity } from "@/lib/activity";
 import { fireTrigger, leadTemplateVars } from "@/lib/automation/engine";
-import { advanceStage } from "@/lib/services/field";
+import { advanceStage, reviseQuotation, reviseQuotationSchema } from "@/lib/services/field";
 import { changeStage } from "@/lib/services/leads";
 import { createProjectForLead } from "@/lib/services/projects";
 import { sendWhatsApp } from "@/lib/whatsapp";
@@ -33,6 +33,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("accept") }),
   z.object({ action: z.literal("reject"), reason: z.string().max(500).optional() }),
   z.object({ action: z.literal("review"), approve: z.boolean(), note: z.string().max(1000).optional(), pinSiteFromCapture: z.boolean().optional() }),
+  reviseQuotationSchema.extend({ action: z.literal("revise") }),
 ]);
 
 export const POST = route<P>("quotations:create", async ({ req, session, params }) => {
@@ -100,6 +101,11 @@ export const POST = route<P>("quotations:create", async ({ req, session, params 
         body: body.note,
       });
       return updated;
+    }
+    case "revise": {
+      const { action: _action, ...rest } = body;
+      void _action;
+      return reviseQuotation(session, q.id, rest);
     }
   }
 });

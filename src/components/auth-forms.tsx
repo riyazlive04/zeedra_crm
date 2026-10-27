@@ -6,11 +6,28 @@ import Link from "next/link";
 import { Button, Field } from "./ui";
 import { api } from "@/lib/client";
 
+/** A stable per-browser id, used only to tag PIN logins for the "last signed in from" audit trail. */
+function deviceId(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    let id = localStorage.getItem("zs_device_id");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("zs_device_id", id);
+    }
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
 export function LoginForm({ showDemo = false }: { showDemo?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
+  const [usePin, setUsePin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(params.get("error") === "inactive" ? "Your account is deactivated." : null);
 
@@ -19,7 +36,9 @@ export function LoginForm({ showDemo = false }: { showDemo?: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      const r = await api<{ home: string }>("/api/auth/login", { body: { email, password } });
+      const r = usePin
+        ? await api<{ home: string }>("/api/auth/pin-login", { body: { email, pin, deviceId: deviceId() } })
+        : await api<{ home: string }>("/api/auth/login", { body: { email, password } });
       const next = params.get("next");
       router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : r.home);
       router.refresh();
@@ -34,13 +53,40 @@ export function LoginForm({ showDemo = false }: { showDemo?: boolean }) {
       <Field label="Work email">
         <input className="input h-11" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
       </Field>
-      <Field label="Password">
-        <input className="input h-11" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-      </Field>
+      {usePin ? (
+        <Field label="PIN">
+          <input
+            className="input h-11 tracking-[0.3em]"
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            required
+            pattern="\d{4,6}"
+            maxLength={6}
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+            placeholder="••••"
+          />
+        </Field>
+      ) : (
+        <Field label="Password">
+          <input className="input h-11" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+      )}
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       <Button variant="primary" size="lg" className="w-full" loading={loading}>
         Sign in
       </Button>
+      <button
+        type="button"
+        onClick={() => {
+          setUsePin((v) => !v);
+          setError(null);
+        }}
+        className="block w-full text-center text-xs font-medium text-slate-500 hover:text-sun-700"
+      >
+        {usePin ? "Use your password instead" : "Use a quick PIN instead"}
+      </button>
       {showDemo && (
       <div className="rounded-xl border border-dashed border-sun-300 bg-sun-50/60 p-3 text-xs text-slate-600">
         <div className="mb-1.5 font-semibold text-slate-800">Demo workspace</div>

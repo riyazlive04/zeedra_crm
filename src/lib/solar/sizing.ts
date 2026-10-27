@@ -1,4 +1,5 @@
 import type { OrgSettings } from "../settings";
+import { tnebMonthlyUnitsFromMonthlyBill, tnebMonthlyBillFromMonthlyUnits } from "./tneb-tariff";
 
 export type SegmentKey =
   | "RESIDENTIAL"
@@ -21,6 +22,31 @@ export interface SizingInput {
   overrideKw?: number | null;
   panelWattage?: number;
   discount?: number;
+  /**
+   * Salesperson types a final negotiated price instead of accepting the computed one. The
+   * pre-tax/GST split is backed out of this figure (same blended rate), and net cost is
+   * recomputed off it — the itemised BoQ and margin lines are left as computed, for reference,
+   * and are not force-reconciled to this number.
+   */
+  manualTotalOverride?: number | null;
+}
+
+export interface BoqLine {
+  key: string;
+  name: string;
+  spec: string;
+  qty: number;
+  unit: string;
+  rate: number;
+  amount: number;
+}
+
+export interface BoqCosts {
+  panelCost: number;
+  inverterCost: number;
+  bos: BoqLine[];
+  bosCost: number;
+  subtotal: number;
 }
 
 export interface SizingResult {
@@ -33,10 +59,16 @@ export interface SizingResult {
   roofNeededSqft: number;
   roofLimitedKw: number | null;
   ratePerKw: number;
+  panelCost: number;
+  inverterCost: number;
+  bosCost: number;
   subtotal: number;
   discount: number;
+  margin: number;
+  marginGstAmount: number;
   gstAmount: number;
   totalCost: number;
+  manualOverride: boolean;
   centralSubsidy: number;
   stateSubsidy: number;
   subsidy: number;
@@ -54,13 +86,22 @@ export interface SizingResult {
 }
 
 const INVERTER_SIZES = [1, 2, 3, 3.3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 33, 40, 50, 60, 75, 80, 100, 110, 125];
+// Used only as a last resort, for an inverter size with no cataloged price at all.
+const FALLBACK_INVERTER_RATE_PER_KW = 5000;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const roundTo = (n: number, step: number) => Math.round(n / step) * step;
 
 /** Monthly units from the bill amount when the customer only knows the rupee figure. */
 export function unitsFromBill(bill: number, s: OrgSettings): number {
+  if (s.tnebTariffEnabled) return tnebMonthlyUnitsFromMonthlyBill(bill);
   return Math.max(0, (bill - s.fixedChargesMonthly) / s.tariffPerUnit);
+}
+
+/** The monthly EB bill a given monthly consumption works out to, under the active tariff model. */
+export function billFromUnits(monthlyUnits: number, s: OrgSettings): number {
+  if (s.tnebTariffEnabled) return tnebMonthlyBillFromMonthlyUnits(monthlyUnits);
+  return monthlyUnits * s.tariffPerUnit + s.fixedChargesMonthly;
 }
 
 /**
@@ -87,6 +128,7 @@ export function centralSubsidy(kw: number, segment: SegmentKey, rates: OrgSettin
   return 0;
 }
 
+/** Slab-based ₹/kW rate — superseded by {@link boqCosts} for pricing; kept for the Settings editor. */
 export function rateForKw(kw: number, s: OrgSettings): number {
   const slabs = [...s.priceSlabs].sort((a, b) => a.upToKw - b.upToKw);
   return (slabs.find((x) => kw <= x.upToKw) ?? slabs[slabs.length - 1]).ratePerKw;
@@ -100,8 +142,9 @@ export function stateSubsidy(kw: number, tiers: OrgSettings["stateSubsidyTiers"]
 }
 
 export function pickInverterKw(dcKw: number): number {
-  // Typical DC/AC ratio up to ~1.1 — choose the smallest standard inverter ≥ 90% of DC.
-  const target = dcKw * 0.9;
+  // Up to 120% DC overloading is standard — choose the smallest inverter where dcKw/inverterKw ≤ 1.2,
+  // i.e. the inverter only needs to cover dcKw / 1.2.
+  const target = dcKw / 1.2;
   return INVERTER_SIZES.find((x) => x >= target) ?? Math.ceil(target);
 }
 
@@ -118,6 +161,45 @@ export function inverterPrice(kw: number, phase: string | null | undefined, cata
   if (next) return next.price;
   const largest = sorted[sorted.length - 1];
   return Math.round((largest.price / largest.kw) * kw);
+}
+
+/**
+ * Bottom-up Bill of Quantities: every component of the system priced independently off the
+ * admin's rate card (Settings → Pricing), summed to get the subtotal — rather than picking one
+ * lump ₹/kW slab price and splitting it proportionally across cosmetic line items.
+ */
+export function boqCosts(
+  dcKw: number,
+  panelCount: number,
+  panelWattage: number,
+  inverterKw: number,
+  phase: string | null | undefined,
+  s: Pick<OrgSettings, "panelRatePerWatt" | "bomRates" | "inverterPrices">,
+): BoqCosts {
+  const panelCost = Math.round(panelCount * panelWattage * s.panelRatePerWatt);
+  const catalogued = inverterPrice(inverterKw, phase, s.inverterPrices);
+  const inverterCost = catalogued > 0 ? catalogued : Math.round(inverterKw * FALLBACK_INVERTER_RATE_PER_KW);
+
+  const bom = s.bomRates;
+  const perKwLines: [string, string, string][] = [
+    ["mounting", "Mounting structure", "mountingPerKw"],
+    ["dcdb", "DCDB — DC distribution box", "dcdbPerKw"],
+    ["acdb", "ACDB — AC distribution box", "acdbPerKw"],
+    ["dcCable", "DC cable", "dcCablePerKw"],
+    ["acCable", "AC copper cable", "acCablePerKw"],
+    ["misc", "Miscellaneous hardware", "miscPerKw"],
+    ["installation", "Installation, testing & commissioning", "installationPerKw"],
+    ["transport", "Transport & logistics", "transportPerKw"],
+    ["netMetering", "Net-metering, DISCOM liaison & subsidy documentation", "netMeteringPerKw"],
+  ];
+  const bos: BoqLine[] = perKwLines.map(([key, name, rateKey]) => {
+    const rate = bom[rateKey as keyof typeof bom];
+    return { key, name, spec: `${dcKw} kWp`, qty: 1, unit: "Lot", rate: Math.round(rate), amount: Math.round(rate * dcKw) };
+  });
+  bos.push({ key: "earthing", name: "Earthing kit & lightning arrester", spec: "Per MNRE guidelines", qty: 1, unit: "Set", rate: Math.round(bom.earthingKitEach + bom.lightningArrestorEach), amount: Math.round(bom.earthingKitEach + bom.lightningArrestorEach) });
+
+  const bosCost = bos.reduce((sum, l) => sum + l.amount, 0);
+  return { panelCost, inverterCost, bos, bosCost, subtotal: panelCost + inverterCost + bosCost };
 }
 
 export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
@@ -148,7 +230,9 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
     }
   }
 
-  const panelCount = Math.max(1, Math.ceil((targetKw * 1000) / wattage));
+  // Round to the nearest whole panel (not always up) — matches a real BoQ panel count.
+  const rawPanels = (targetKw * 1000) / wattage;
+  const panelCount = Math.max(1, rawPanels % 1 < 0.5 ? Math.floor(rawPanels) : Math.ceil(rawPanels));
   const dcKw = round2((panelCount * wattage) / 1000);
   const inverterKw = pickInverterKw(dcKw);
 
@@ -162,12 +246,23 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
     warnings.push("Residential systems above 10 kW may need additional DISCOM technical feasibility approval.");
   }
 
-  const ratePerKw = rateForKw(dcKw, s);
-  const subtotal = Math.round(dcKw * ratePerKw);
+  const boq = boqCosts(dcKw, panelCount, wattage, inverterKw, input.phase, s);
+  const subtotal = boq.subtotal;
   const discount = Math.min(Math.max(input.discount ?? 0, 0), subtotal);
   const taxable = subtotal - discount;
-  const gstAmount = Math.round((taxable * s.gstRate) / 100);
-  const totalCost = taxable + gstAmount;
+  const margin = Math.round((taxable * (s.marginPct ?? 0)) / 100);
+  const subtotalGst = Math.round((taxable * s.gstRate) / 100);
+  const marginGstAmount = Math.round((margin * s.gstRate) / 100);
+  let gstAmount = subtotalGst + marginGstAmount;
+  let totalCost = taxable + margin + gstAmount;
+
+  const manualOverride = Boolean(input.manualTotalOverride && input.manualTotalOverride > 0);
+  if (manualOverride && input.manualTotalOverride) {
+    // Reverse the blended GST rate out of the typed-in final price, keeping the books balanced.
+    const preTax = Math.round(input.manualTotalOverride / (1 + s.gstRate / 100));
+    gstAmount = input.manualTotalOverride - preTax;
+    totalCost = input.manualTotalOverride;
+  }
 
   const central = s.centralSubsidyEnabled ? centralSubsidy(dcKw, segment, s.subsidyRates) : 0;
   const state = stateSubsidy(dcKw, s.stateSubsidyTiers);
@@ -175,10 +270,18 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
   const netCost = totalCost - subsidy;
 
   const annualGenerationKwh = Math.round(dcKw * s.specificYield);
-  const annualConsumption = monthlyUnits * 12;
-  const selfUsed = annualConsumption > 0 ? Math.min(annualGenerationKwh, annualConsumption) : annualGenerationKwh;
-  const exported = Math.max(0, annualGenerationKwh - selfUsed);
-  const annualSavings = Math.round(selfUsed * s.tariffPerUnit + exported * s.exportTariffPerUnit);
+  const monthlyGenerationKwh = annualGenerationKwh / 12;
+  const selfUsedMonthly = monthlyUnits > 0 ? Math.min(monthlyGenerationKwh, monthlyUnits) : monthlyGenerationKwh;
+  const exportedMonthly = Math.max(0, monthlyGenerationKwh - selfUsedMonthly);
+
+  // Self-consumed units are valued by what they actually save on the bill (telescopic tariffs
+  // displace the most expensive units first automatically when you reduce total consumption);
+  // exported/net-metered units are credited at the separate export tariff.
+  const billBefore = billFromUnits(monthlyUnits, s);
+  const billAfterSelfUse = billFromUnits(Math.max(0, monthlyUnits - selfUsedMonthly), s);
+  const monthlySavingsFromSelfUse = Math.max(0, billBefore - billAfterSelfUse);
+  const monthlySavingsFromExport = exportedMonthly * s.exportTariffPerUnit;
+  const annualSavings = Math.round((monthlySavingsFromSelfUse + monthlySavingsFromExport) * 12);
 
   let savings25Years = 0;
   for (let y = 0; y < 25; y++) {
@@ -186,8 +289,7 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
       annualSavings * Math.pow(1 - s.degradationPct / 100, y) * Math.pow(1 + s.tariffEscalationPct / 100, y);
   }
 
-  const currentMonthlyBill = monthlyUnits * s.tariffPerUnit + s.fixedChargesMonthly;
-  const newMonthlyBill = Math.max(s.fixedChargesMonthly, Math.round(currentMonthlyBill - annualSavings / 12));
+  const newMonthlyBill = Math.round(billAfterSelfUse);
   const co2 = (annualGenerationKwh * s.gridEmissionFactor) / 1000;
 
   return {
@@ -199,17 +301,23 @@ export function sizeSystem(input: SizingInput, s: OrgSettings): SizingResult {
     inverterKw,
     roofNeededSqft: Math.round(dcKw * s.roofSqftPerKw),
     roofLimitedKw,
-    ratePerKw,
+    ratePerKw: dcKw > 0 ? Math.round(subtotal / dcKw) : 0,
+    panelCost: boq.panelCost,
+    inverterCost: boq.inverterCost,
+    bosCost: boq.bosCost,
     subtotal,
     discount,
+    margin,
+    marginGstAmount,
     gstAmount,
     totalCost,
+    manualOverride,
     centralSubsidy: central,
     stateSubsidy: state,
     subsidy,
     netCost,
     annualGenerationKwh,
-    monthlyGenerationKwh: Math.round(annualGenerationKwh / 12),
+    monthlyGenerationKwh: Math.round(monthlyGenerationKwh),
     annualSavings,
     monthlySavings: Math.round(annualSavings / 12),
     newMonthlyBill,
