@@ -14,6 +14,7 @@ import { StageBadge, TemperatureBadge, VerdictBadge, STAGE_LABEL } from "../badg
 import { NumberInput, Segmented, YesNo } from "../form-controls";
 import { BillReader } from "../bill-reader";
 import { SolarEstimate } from "../solar-estimate";
+import { PanelLayoutEditor, usePanelLayout } from "../solar/panel-layout-editor";
 import { BookAppointmentModal } from "../appointments/book-modal";
 import { WhatsAppThread, type WaMessage } from "../whatsapp/thread";
 import { Map } from "../map/map";
@@ -415,12 +416,13 @@ function QualificationForm({ lead, settings, canEdit, onSaved }: { lead: Lead; s
 
 function ProposalTab({ lead, settings, quoteHref, canQuote }: { lead: Lead; settings: OrgSettings; quoteHref: string; canQuote: boolean }) {
   const [override, setOverride] = useState<number | null>(null);
+  const [layout, setLayout, resetLayout] = usePanelLayout(lead.id, settings.defaultPanelWattage);
   const r = useMemo(
     () =>
       lead.monthlyBill || lead.monthlyUnits || override
-        ? sizeSystem({ monthlyBill: lead.monthlyBill, monthlyUnits: lead.monthlyUnits, segment: lead.segment, roofAreaSqft: override ? null : lead.roofAreaSqft, sanctionedLoadKw: lead.sanctionedLoadKw, phase: lead.phase, overrideKw: override }, settings)
+        ? sizeSystem({ monthlyBill: lead.monthlyBill, monthlyUnits: lead.monthlyUnits, segment: lead.segment, roofAreaSqft: override ? null : lead.roofAreaSqft, sanctionedLoadKw: lead.sanctionedLoadKw, phase: lead.phase, overrideKw: override, panelWattage: layout.watt }, settings)
         : null,
-    [lead, settings, override],
+    [lead, settings, override, layout.watt],
   );
   if (!r) return <Card><EmptyState icon={<Info className="h-5 w-5" />} title="No energy data yet" body="Add the monthly bill or units in Qualification to generate a proposal." /></Card>;
   const options = loanOptions(r.netCost, r.monthlySavings, settings.loanRatePct, settings.loanDownPaymentPct);
@@ -443,7 +445,10 @@ function ProposalTab({ lead, settings, quoteHref, canQuote }: { lead: Lead; sett
             )}
           </div>
         </div>
-        <SolarEstimate r={r} />
+        <SolarEstimate
+          r={r}
+          layout={<PanelLayoutEditor state={layout} onChange={setLayout} onReset={resetLayout} panelCount={r.panelCount} systemKw={r.recommendedKw} roofAreaSqft={lead.roofAreaSqft} />}
+        />
       </Card>
       <Card>
         <CardHeader title="Finance options" subtitle={`Solar loan at ${settings.loanRatePct}% with ${settings.loanDownPaymentPct}% down payment`} icon={<Landmark className="h-4 w-4" />} />

@@ -5,7 +5,7 @@ import { formatINR, formatNumber } from "@/lib/text";
 import { PanelLayoutPreview } from "./solar/panel-layout";
 
 /** The customer-facing estimate block used on lead pages, the calculator and public landing pages. */
-export function SolarEstimate({ r, loan, dense }: { r: SizingResult; loan?: LoanPlan | null; dense?: boolean }) {
+export function SolarEstimate({ r, loan, dense, layout }: { r: SizingResult; loan?: LoanPlan | null; dense?: boolean; layout?: React.ReactNode }) {
   const tile = (icon: React.ReactNode, label: string, value: React.ReactNode, sub?: React.ReactNode) => (
     <div className="rounded-xl border border-slate-100 bg-white p-3">
       <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
@@ -65,7 +65,7 @@ export function SolarEstimate({ r, loan, dense }: { r: SizingResult; loan?: Loan
       )}
       {!dense && (
         <div className="rounded-xl border border-slate-100 bg-white p-4">
-          <PanelLayoutPreview panelCount={r.panelCount} panelWattage={r.panelWattage} systemKw={r.recommendedKw} />
+          {layout ?? <PanelLayoutPreview panelCount={r.panelCount} panelWattage={r.panelWattage} systemKw={r.recommendedKw} />}
         </div>
       )}
     </div>
