@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import crypto from "node:crypto";
 import { runScheduledAutomations } from "@/lib/automation/engine";
+import { syncAllMetaLeads } from "@/lib/services/meta-leads";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,7 +21,8 @@ async function handler(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const started = Date.now();
   const summary = await runScheduledAutomations();
-  return NextResponse.json({ ok: true, ...summary, ms: Date.now() - started });
+  const meta = await syncAllMetaLeads();
+  return NextResponse.json({ ok: true, ...summary, ...meta, ms: Date.now() - started });
 }
 
 export { handler as GET, handler as POST };

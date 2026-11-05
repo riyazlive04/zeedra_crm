@@ -640,11 +640,13 @@ export function IntegrationsPanel({
   googleOAuth,
   googleEmail,
   googleStatus,
+  meta,
 }: {
   appUrl: string;
   apiKey: string;
   orgSlug: string;
   whatsapp: { phoneNumberId: string | null; businessId: string | null; connected: boolean };
+  meta: MetaLeadsState;
   ai: boolean;
   googleOAuth: boolean;
   googleEmail: string | null;
@@ -696,6 +698,8 @@ export function IntegrationsPanel({
         </div>
       </Card>
 
+      <MetaLeadsCard appUrl={appUrl} meta={meta} />
+
       <Card>
         <CardHeader title="Google Calendar" subtitle="Each salesperson connects their own calendar from their profile" icon={<CalendarDays className="h-4 w-4" />} action={status(googleOAuth, "OAuth configured", "Not configured")} />
         <div className="space-y-3 p-5 text-sm text-slate-600">
@@ -718,7 +722,7 @@ export function IntegrationsPanel({
       </Card>
 
       <Card>
-        <CardHeader title="Lead capture API & website form" subtitle="Facebook Lead Ads (via Zapier/Make), IndiaMART, JustDial, your website" icon={<KeyRound className="h-4 w-4" />} />
+        <CardHeader title="Lead capture API & website form" subtitle="IndiaMART, JustDial, Zapier/Make, your website" icon={<KeyRound className="h-4 w-4" />} />
         <div className="space-y-4 p-5">
           <Field label="API key">
             <div className="flex gap-2">
@@ -753,6 +757,110 @@ export function IntegrationsPanel({
         </div>
       </Card>
     </div>
+  );
+}
+
+export interface MetaLeadsState {
+  pageId: string | null;
+  pageName: string | null;
+  syncedAt: string | null;
+  imported: number;
+  skipped: { at: string; error: string }[];
+}
+
+/** Facebook & Instagram Lead Ads: connect a Page, then leads arrive by webhook and scheduled sync. */
+function MetaLeadsCard({ appUrl, meta }: { appUrl: string; meta: MetaLeadsState }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pageId, setPageId] = useState(meta.pageId ?? "");
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const connected = Boolean(meta.pageId);
+
+  async function act(action: "connect" | "sync" | "disconnect") {
+    if (action === "disconnect" && !confirm("Disconnect this Facebook Page? New Facebook leads will stop arriving.")) return;
+    setBusy(action);
+    try {
+      const r = await api<{ pageName?: string; webhook?: boolean; created?: number; fetched?: number; sync?: { created: number; fetched: number } }>("/api/integrations/meta", {
+        body: action === "connect" ? { action, pageId, accessToken: token } : { action },
+      });
+      if (action === "connect") {
+        toast.success(`Connected ${r.pageName}`, `${r.sync?.created ?? 0} new leads imported from the last 30 days.${r.webhook ? "" : " Webhook not subscribed — leads arrive with each scheduled sync."}`);
+        setToken("");
+      } else if (action === "sync") toast.success("Facebook leads synced", `${r.created ?? 0} new of ${r.fetched ?? 0} checked.`);
+      else toast.success("Facebook Page disconnected");
+      router.refresh();
+    } catch (e) {
+      toast.error("Facebook Lead Ads", e instanceof Error ? e.message : undefined);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Facebook & Instagram Lead Ads (Meta)"
+        subtitle="Every instant-form submission becomes a lead, assigned and followed up automatically"
+        icon={<Globe className="h-4 w-4" />}
+        action={
+          <Badge tone={connected ? "green" : "slate"}>
+            {connected ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+            {connected ? meta.pageName ?? "Connected" : "Not connected"}
+          </Badge>
+        }
+      />
+      <div className="space-y-4 p-5">
+        {connected && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+            <span>
+              <b>{meta.imported}</b> leads imported
+            </span>
+            <span>Last sync: {meta.syncedAt ? <TimeAgo date={meta.syncedAt} /> : "never"}</span>
+          </div>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Facebook Page ID">
+            <input className="input" value={pageId} onChange={(e) => setPageId(e.target.value.trim())} placeholder="e.g. 104512345678901" />
+          </Field>
+          <Field label="Access token" hint={connected ? "Only needed to reconnect or change the Page" : "Page token, or a Page admin's user token with leads_retrieval"}>
+            <input className="input" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+          </Field>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
+          <b>Webhook</b> (Meta app → Webhooks → <i>Page</i>): callback URL <code className="rounded bg-white px-1 py-0.5">{appUrl}/api/webhooks/meta-leads</code> · verify token ={" "}
+          <code>META_VERIFY_TOKEN</code> (or <code>WHATSAPP_VERIFY_TOKEN</code>) · subscribe to <i>leadgen</i>. Connecting subscribes your Page automatically. Leads missed by the webhook are pulled by every
+          scheduled sync, so nothing is lost.
+        </div>
+        {meta.skipped.length > 0 && (
+          <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+            <b>Not imported recently</b>
+            <ul className="mt-1 list-disc pl-4">
+              {meta.skipped.map((x, i) => (
+                <li key={i}>
+                  <TimeAgo date={x.at} /> — {x.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          {connected && (
+            <>
+              <Button onClick={() => act("disconnect")} loading={busy === "disconnect"}>
+                Disconnect
+              </Button>
+              <Button onClick={() => act("sync")} loading={busy === "sync"}>
+                <RefreshCw className="h-4 w-4" /> Sync now
+              </Button>
+            </>
+          )}
+          <Button variant="primary" onClick={() => act("connect")} loading={busy === "connect"} disabled={!pageId || token.length < 20}>
+            {connected ? "Reconnect" : "Connect Page"}
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 

@@ -32,6 +32,11 @@ model Organization {
   waPhoneNumberId String?
   waAccessToken   String?
   waBusinessId    String?
+  // Meta Lead Ads (Facebook & Instagram): the connected Page and its Page access token
+  metaPageId        String?   @unique
+  metaPageName      String?
+  metaPageToken     String?
+  metaLeadsSyncedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -526,6 +531,29 @@ model Agreement {
   quotation    Quotation    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, quotationId, createdAt])
+}
+
+/// One Meta Lead Ads submission (Facebook / Instagram instant form), recorded once per org so a
+/// lead that arrives by webhook and again by sync is never created twice. `leadId` is null when
+/// the submission could not become a lead (e.g. no phone number); `error` says why.
+model MetaLead {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadgenId      String
+  pageId         String
+  formId         String?
+  formName       String?
+  adName         String?
+  campaignName   String?
+  platform       String? // fb | ig
+  submittedAt    DateTime
+  fields         Json // [{ name, values }] exactly as Meta sent them
+  leadId         String?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, leadgenId])
+  @@index([organizationId, createdAt])
 }
 
 model LocationPing {

@@ -82,6 +82,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           {tab === "templates" && <TemplatesPanel templates={await db.messageTemplate.findMany({ where: { organizationId: session.orgId }, orderBy: { name: "asc" } })} />}
           {tab === "integrations" && (
             <IntegrationsPanel
+              meta={{
+                pageId: org.metaPageId,
+                pageName: org.metaPageName,
+                syncedAt: org.metaLeadsSyncedAt?.toISOString() ?? null,
+                imported: await db.metaLead.count({ where: { organizationId: org.id, leadId: { not: null } } }),
+                skipped: (
+                  await db.metaLead.findMany({ where: { organizationId: org.id, leadId: null, error: { not: null } }, orderBy: { createdAt: "desc" }, take: 5, select: { createdAt: true, error: true } })
+                ).map((x) => ({ at: x.createdAt.toISOString(), error: x.error ?? "" })),
+              }}
               appUrl={appUrl}
               apiKey={org.apiKey}
               orgSlug={org.slug}
