@@ -10,7 +10,7 @@ export default async function CalculatorPage() {
   const settings = await orgSettings(session.orgId);
   return (
     <div>
-      <PageHeader title="Solar Calculator" subtitle="EB bill → system size, PM Surya Ghar subsidy, savings, payback and EMI. Use it live on calls." />
+      <PageHeader title="Solar Calculator" subtitle="Bi-monthly EB bill → system size, subsidy, bi-monthly savings and EMI vs EB bill. Use it live on calls." />
       <SolarCalculator settings={settings} />
     </div>
   );
