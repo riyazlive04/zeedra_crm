@@ -181,7 +181,8 @@ export const HELP_TOPICS: { key: HelpTopicKey; label: string; perm: HelpPerm; se
     perm: "leads",
     body: (
       <div className="space-y-3">
-        <P>Tasks is your follow-up to-do list. Most tasks are created automatically (for example, "call back in 2 days"), but you can also add your own from a lead's Timeline tab.</P>
+        <P>Tasks is your follow-up to-do list. Most tasks are created automatically (for example, "call back in 2 days"), but you can also add your own at the top of the Tasks page.</P>
+        <P>Owners, Admins and Sales Managers see an <b>Assign to</b> list there: pick a team member and they are notified and see the task in their own list.</P>
         <P>Sales Managers, Admins and the Owner can switch between <b>Show only mine</b> and <b>Show whole team</b> to see what everyone is working on.</P>
       </div>
     ),

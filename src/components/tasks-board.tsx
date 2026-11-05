@@ -9,6 +9,7 @@ import { Plus } from "lucide-react";
 import { Badge, Button, Card, EmptyState } from "./ui";
 import { api } from "@/lib/client";
 import { useToast } from "./toast";
+import { humanize } from "@/lib/text";
 
 export interface TaskItem {
   id: string;
@@ -20,12 +21,15 @@ export interface TaskItem {
   assignedTo: { name: string } | null;
 }
 
-export function TasksBoard({ tasks, showAssignee }: { tasks: TaskItem[]; showAssignee: boolean }) {
+/** `team` (managers and above): the people a task can be assigned to; omit to add tasks for yourself only. */
+export function TasksBoard({ tasks, showAssignee, team, meId }: { tasks: TaskItem[]; showAssignee: boolean; team?: { id: string; name: string; role: string }[]; meId?: string }) {
   const router = useRouter();
   const toast = useToast();
   const [items, setItems] = useState(tasks);
   const [title, setTitle] = useState("");
   const [due, setDue] = useState(format(new Date(Date.now() + 3_600_000), "yyyy-MM-dd'T'HH:mm"));
+  const [assignee, setAssignee] = useState(meId ?? "");
+  const [priority, setPriority] = useState("NORMAL");
   const [adding, setAdding] = useState(false);
 
   async function toggle(t: TaskItem) {
@@ -44,8 +48,11 @@ export function TasksBoard({ tasks, showAssignee }: { tasks: TaskItem[]; showAss
     if (!title.trim()) return;
     setAdding(true);
     try {
-      await api("/api/tasks", { body: { title: title.trim(), dueAt: new Date(due).toISOString() } });
+      await api("/api/tasks", { body: { title: title.trim(), dueAt: new Date(due).toISOString(), priority, ...(team && assignee ? { assignedToId: assignee } : {}) } });
+      const who = team?.find((u) => u.id === assignee);
+      if (who && assignee !== meId) toast.success(`Task assigned to ${who.name}`, "They have been notified.");
       setTitle("");
+      setPriority("NORMAL");
       router.refresh();
     } catch (err) {
       toast.error("Could not add task", err instanceof Error ? err.message : undefined);
@@ -67,7 +74,21 @@ export function TasksBoard({ tasks, showAssignee }: { tasks: TaskItem[]; showAss
       <Card className="p-3">
         <form onSubmit={add} className="flex flex-wrap gap-2">
           <input className="input min-w-[14rem] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add a task — e.g. Call Ravi about loan documents" />
-          <input type="datetime-local" className="input w-auto" value={due} onChange={(e) => setDue(e.target.value)} />
+          <input type="datetime-local" className="input w-auto" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due" />
+          {team && (
+            <select className="input w-auto" value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Assign to">
+              {team.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.id === meId ? `Me (${u.name})` : `${u.name} · ${humanize(u.role)}`}
+                </option>
+              ))}
+            </select>
+          )}
+          <select className="input w-auto" value={priority} onChange={(e) => setPriority(e.target.value)} aria-label="Priority">
+            <option value="LOW">Low</option>
+            <option value="NORMAL">Normal</option>
+            <option value="HIGH">High</option>
+          </select>
           <Button variant="primary" loading={adding}>
             <Plus className="h-4 w-4" /> Add
           </Button>

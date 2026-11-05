@@ -3,6 +3,8 @@ import { route, parseBody, searchParams } from "@/lib/api";
 import { db } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { ApiError } from "@/lib/errors";
+import { notify } from "@/lib/activity";
+import { format } from "date-fns";
 
 export const GET = route(null, async ({ req, session }) => {
   const q = searchParams(req);
@@ -27,7 +29,14 @@ export const POST = route(null, async ({ req, session }) => {
   const body = await parseBody(req, createSchema);
   if (body.leadId && !(await db.lead.count({ where: { id: body.leadId, organizationId: session.orgId } }))) throw new ApiError(400, "Lead not found");
   const assignee = can(session.role, "leads:assign") ? (body.assignedToId ?? session.userId) : session.userId;
-  return db.task.create({ data: { ...body, assignedToId: assignee, organizationId: session.orgId } });
+  if (assignee !== session.userId && !(await db.user.count({ where: { id: assignee, organizationId: session.orgId, active: true } })))
+    throw new ApiError(400, "Pick an active team member");
+  const task = await db.task.create({ data: { ...body, assignedToId: assignee, organizationId: session.orgId } });
+  if (assignee !== session.userId) {
+    const me = await db.user.findUnique({ where: { id: session.userId }, select: { name: true } });
+    await notify(session.orgId, assignee, `New task from ${me?.name ?? "your manager"}`, `${task.title} · due ${format(task.dueAt, "d MMM, h:mm a")}`, "/tasks");
+  }
+  return task;
 });
 
 const patchSchema = z.object({ id: z.string(), done: z.boolean() });

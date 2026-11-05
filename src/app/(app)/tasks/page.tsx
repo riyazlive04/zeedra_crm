@@ -11,6 +11,10 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const session = await requirePageSession();
   const { team } = await searchParams;
   const showTeam = team === "1" && can(session.role, "leads:assign");
+  const canAssign = can(session.role, "leads:assign");
+  const teamMembers = canAssign
+    ? await db.user.findMany({ where: { organizationId: session.orgId, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })
+    : undefined;
   const tasks = await db.task.findMany({
     where: {
       organizationId: session.orgId,
@@ -25,7 +29,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title={showTeam ? "Team tasks" : "My tasks"}
-        subtitle="Follow-ups created by you and by automations."
+        subtitle={canAssign ? "Follow-ups for you and your team — pick who does it when you add a task." : "Follow-ups created by you and by automations."}
         actions={
           can(session.role, "leads:assign") && (
             <Link href={showTeam ? "/tasks" : "/tasks?team=1"} className="text-sm font-medium text-sun-700 hover:underline">
@@ -34,7 +38,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
           )
         }
       />
-      <TasksBoard key={String(showTeam)} showAssignee={showTeam} tasks={tasks.map((t) => ({ ...t, dueAt: t.dueAt.toISOString() }))} />
+      <TasksBoard key={String(showTeam)} showAssignee={showTeam} team={teamMembers} meId={session.userId} tasks={tasks.map((t) => ({ ...t, dueAt: t.dueAt.toISOString() }))} />
     </div>
   );
 }
