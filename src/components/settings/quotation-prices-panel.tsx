@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { ChevronRight, Plus, RotateCcw, X } from "lucide-react";
@@ -147,7 +148,6 @@ export function QuotationPricesPanel({ settings }: { settings: OrgSettings }) {
   const [pDcr, setPDcr] = useState<Row2[]>(toRows(initialCustom.panel_dcr));
   const [pNdcr, setPNdcr] = useState<Row2[]>(toRows(initialCustom.panel_ndcr));
   const [comps, setComps] = useState<CompRow[]>(initialCustom.components.map((c) => ({ name: c.name, price: String(c.price), perKw: c.perKw })));
-  const [stages, setStages] = useState(q.paymentStages.map((s) => ({ ...s, pct: String(s.pct) })));
   const [stateSubsidy, setStateSubsidy] = useState(q.stateSubsidy);
   const [bank, setBank] = useState(q.bank);
   const [signatoryName, setSignatoryName] = useState(q.signatoryName);
@@ -166,7 +166,6 @@ export function QuotationPricesPanel({ settings }: { settings: OrgSettings }) {
     panel_ndcr: pNdcr.filter((r) => +r.a > 0 && +r.b > 0).map((r) => ({ w: +r.a, perW: +r.b })),
     components: comps.filter((c) => c.name.trim() && +c.price > 0).map((c) => ({ name: c.name.trim(), price: +c.price, perKw: c.perKw })),
   };
-  const stageTotal = stages.reduce((sum, s) => sum + (Number(s.pct) || 0), 0);
 
   const wattSelect = (key: string, type: PanelTech, label: string) => {
     const opts = wattOptions(type, customNow);
@@ -193,7 +192,6 @@ export function QuotationPricesPanel({ settings }: { settings: OrgSettings }) {
       DCR_PRICE_WATTS.some((w) => p["dcr_pw_" + w] !== "" && (+p["dcr_pw_" + w] < 21 || +p["dcr_pw_" + w] > 35)) ||
       NDCR_PRICE_WATTS.some((w) => p["ndcr_pw_" + w] !== "" && (+p["ndcr_pw_" + w] < 15 || +p["ndcr_pw_" + w] > 25));
     if (bad) return toast.error("Some panel prices are out of range", "DCR ₹21–35/W, NDCR ₹15–25/W.");
-    if (Math.abs(stageTotal - 100) > 0.001) return toast.error("Payment stages must add up to 100%", `They add up to ${stageTotal}% now.`);
     const prices: Record<string, number | string> = {};
     for (const key of Object.keys(QUOTIFY_DEFAULTS) as (keyof typeof QUOTIFY_DEFAULTS)[]) {
       const def = QUOTIFY_DEFAULTS[key];
@@ -211,7 +209,7 @@ export function QuotationPricesPanel({ settings }: { settings: OrgSettings }) {
               custom: customNow,
               defaultPanelType,
               stateSubsidy,
-              paymentStages: stages.map((s) => ({ name: s.name.trim(), pct: Number(s.pct) || 0, when: s.when.trim() })).filter((s) => s.name),
+              paymentStages: q.paymentStages,
               bank: { name: bank.name.trim(), branch: bank.branch.trim(), accNo: bank.accNo.trim(), ifsc: bank.ifsc.trim() },
               signatoryName: signatoryName.trim(),
               footerLine: footerLine.trim(),
@@ -408,30 +406,9 @@ export function QuotationPricesPanel({ settings }: { settings: OrgSettings }) {
       <Card>
         <CardHeader title="Quotation terms page" subtitle={`Printed on page 4 of every quotation. Validity (${settings.quotationValidityDays} days) is set under Pricing & subsidy.`} />
         <div className="space-y-5 p-5">
-          <div>
-            <div className="label">Payment Terms</div>
-            <p className="mb-2 text-xs text-slate-500">Percent of the total project cost. They must add up to 100%.</p>
-            <div className="space-y-2">
-              {stages.map((st, i) => (
-                <div key={i} className="space-y-1.5 rounded-xl border border-slate-200 p-3">
-                  <div className="flex gap-2">
-                    <input className="input flex-1" placeholder="Stage name, e.g. Booking Advance" value={st.name} onChange={(e) => setStages(stages.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
-                    <input type="number" className="input w-20" placeholder="%" value={st.pct} onChange={(e) => setStages(stages.map((x, j) => (j === i ? { ...x, pct: e.target.value } : x)))} />
-                    <button type="button" onClick={() => setStages(stages.filter((_, j) => j !== i))} className="text-slate-400 hover:text-rose-600" aria-label="Remove stage">
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <input className="input" placeholder="When it is due (optional)" value={st.when} onChange={(e) => setStages(stages.map((x, j) => (j === i ? { ...x, when: e.target.value } : x)))} />
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <Button size="xs" onClick={() => setStages([...stages, { name: "", pct: "", when: "" }])}>
-                <Plus className="h-3 w-3" /> Add stage
-              </Button>
-              <span className={clsx("text-xs font-semibold", Math.abs(stageTotal - 100) < 0.001 ? "text-emerald-700" : "text-rose-600")}>Total: {stageTotal}%</span>
-            </div>
-          </div>
+          <p className="text-xs text-slate-500">
+            Payment Terms print the payment stages from <Link href="/settings?tab=agreement" className="font-semibold text-sky-700 underline">Settings → Agreement</Link>.
+          </p>
           <Field label="Tamil Nadu state subsidy (G.O. 102)" hint="Adds ₹5,000 / ₹10,000 / ₹22,000 to DCR quotations">
             <YesNo value={stateSubsidy} onChange={(v) => setStateSubsidy(v ?? false)} yes="On" no="Off" />
           </Field>

@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ChevronLeft, CheckCircle2, XCircle, Smartphone, Clock, MapPin, Eye } from "lucide-react";
+import { ChevronLeft, CheckCircle2, XCircle, Smartphone, Clock, MapPin, Eye, FileSignature } from "lucide-react";
 import { requirePageSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { orgSettings } from "@/lib/api";
-import { Card, CardHeader, Badge } from "@/components/ui";
+import { Card, CardHeader, Badge, ButtonLink } from "@/components/ui";
 import { VerdictBadge, VERDICT_META } from "@/components/badges";
 import { ProposalDocument } from "@/components/quotes/proposal-document";
 import { QuotationDocument, docCompany } from "@/components/quotes/quotation-document";
@@ -70,7 +70,14 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
             {q.lead.name} · {q.lead.code}
           </Link>
         </div>
-        <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} priceOnly={isQuotifySnapshot(q.quoteData)} />
+        <div className="flex flex-wrap items-center gap-2">
+          {revisions.some((r) => r.status === "ACCEPTED") && (
+            <ButtonLink href={`/quotations/${rootId}/agreement`} size="sm">
+              <FileSignature className="h-4 w-4" /> Agreement
+            </ButtonLink>
+          )}
+          <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} priceOnly={isQuotifySnapshot(q.quoteData)} />
+        </div>
       </div>
       {!isLatest && (
         <div className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

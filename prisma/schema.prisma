@@ -50,6 +50,7 @@ model Organization {
   auditLogs     AuditLog[]
   notifications Notification[]
   counters      Counter[]
+  agreements    Agreement[]
 }
 
 enum Role {
@@ -498,12 +499,33 @@ model Quotation {
   appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   parent       Quotation?   @relation("QuotationRevisions", fields: [parentId], references: [id], onDelete: SetNull)
   revisions    Quotation[]  @relation("QuotationRevisions")
+  agreements   Agreement[]
 
   // Revisions of the same quote share `number`, so uniqueness is on the (number, version) pair.
   @@unique([organizationId, number, version])
   @@index([organizationId, createdAt])
   @@index([organizationId, geoVerdict])
   @@index([parentId])
+}
+
+/// Consumer–Vendor agreement (PM Surya Ghar, MNRE Annex 2) made for an accepted quotation.
+/// Insert-only: "Change" makes a new row, and the latest row is the agreement in force.
+/// `data` is AgreementData (src/lib/solar/agreement.ts); Aadhaar is kept as the last 4 digits only.
+model Agreement {
+  id             String   @id @default(cuid())
+  organizationId String
+  quotationId    String // the lineage's root quotation
+  quoteNumber    String
+  custName       String
+  data           Json
+  createdById    String?
+  createdByName  String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quotation    Quotation    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, quotationId, createdAt])
 }
 
 model LocationPing {

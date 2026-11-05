@@ -167,12 +167,14 @@ export const orgSettingsSchema = z.object({
       defaultPanelType: z.enum(["bifacial", "topcon", "hjt"]).default("bifacial"),
       // Tamil Nadu G.O. 102 state top-up on DCR quotes.
       stateSubsidy: z.boolean().default(true),
-      // Printed under "Payment Terms" on the terms page.
+      // Printed under "Payment Terms" on the quotation's terms page, and the default schedule of
+      // every agreement (Settings → Agreement edits them).
       paymentStages: z
         .array(z.object({ name: z.string().min(1).max(120), pct: z.number().min(0).max(100), when: z.string().max(300).default("") }))
         .default([
-          { name: "on delivery of materials to site", pct: 50, when: "" },
-          { name: "after installation", pct: 50, when: "" },
+          { name: "Booking Advance", pct: 10, when: "at the time of booking and confirmation of the project" },
+          { name: "Material Payment", pct: 75, when: "when the project materials are delivered to or made available at the site, before commencement of installation" },
+          { name: "Balance Payment (Upon Net Metering)", pct: 15, when: "upon completion of the installation and completion of the net metering process, subject to applicable DISCOM procedures" },
         ]),
       bank: z
         .object({ name: z.string().default(""), branch: z.string().default(""), accNo: z.string().default(""), ifsc: z.string().default("") })
@@ -181,6 +183,19 @@ export const orgSettingsSchema = z.object({
       signatoryName: z.string().max(120).default(""),
       // Optional second line under the company name in each page footer (e.g. branch offices).
       footerLine: z.string().max(200).default(""),
+    })
+    .default({}),
+
+  // Consumer–Vendor agreement (src/lib/solar/agreement.ts). Blank company fields fall back to
+  // the company profile's name and address.
+  agreement: z
+    .object({
+      vendorName: z.string().max(120).default(""),
+      vendorAddress: z.string().max(300).default(""),
+      // Print on stamp paper: leave the top half of page 1 blank.
+      stamp: z.boolean().default(true),
+      // Blank = the standard PM Surya Ghar text.
+      text: z.string().max(40_000).default(""),
     })
     .default({}),
 

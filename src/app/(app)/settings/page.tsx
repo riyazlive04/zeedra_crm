@@ -9,6 +9,7 @@ import { googleConfigured } from "@/lib/google-calendar";
 import { PageHeader } from "@/components/ui";
 import { BRAND } from "@/lib/brand";
 import { QuotationPricesPanel } from "@/components/settings/quotation-prices-panel";
+import { AgreementPanel } from "@/components/settings/agreement-panel";
 import { BillingPanel, CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel, WorkflowPanel } from "@/components/settings/settings-panels";
 
 export const metadata = { title: "Settings" };
@@ -17,6 +18,7 @@ const TABS = [
   ["company", "Company"],
   ["pricing", "Pricing & subsidy"],
   ["quotation", "Quotation prices"],
+  ["agreement", "Agreement"],
   ["qualification", "Qualification"],
   ["field", "GPS validation"],
   ["schedule", "Scheduling"],
@@ -57,6 +59,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div className="min-w-0">
           {tab === "company" && <CompanyPanel org={org} />}
           {tab === "quotation" && <QuotationPricesPanel settings={settings} />}
+          {tab === "agreement" && <AgreementPanel settings={settings} org={org} />}
           {(tab === "pricing" || tab === "qualification" || tab === "field" || tab === "schedule") && <RulesPanel key={tab} settings={settings} section={tab} />}
           {tab === "workflow" && (
             <WorkflowPanel
