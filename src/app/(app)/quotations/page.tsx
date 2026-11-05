@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { format } from "date-fns";
-import { FileText, Plus } from "lucide-react";
+import { ExternalLink, FileText, Plus } from "lucide-react";
 import { requirePageSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/rbac";
@@ -10,6 +10,9 @@ import { VerdictBadge } from "@/components/badges";
 import { formatINR, formatINRCompact, humanize } from "@/lib/text";
 
 export const metadata = { title: "Quotations" };
+
+// External Quotify quotation tool, opened in a new tab.
+const QUOTIFY_URL = "https://quote.zeedra.in/";
 
 const FILTERS = [
   ["", "All"],
@@ -47,11 +50,16 @@ export default async function QuotationsPage({ searchParams }: { searchParams: P
         title="Quotations"
         subtitle="Every proposal with who created it, where and when."
         actions={
-          can(session.role, "quotations:review") && (
-            <ButtonLink href="/quotations/new" variant="primary" size="sm">
-              <Plus className="h-4 w-4" /> New quotation
+          <div className="flex gap-2">
+            <ButtonLink href={QUOTIFY_URL} target="_blank" rel="noopener noreferrer" size="sm">
+              <ExternalLink className="h-4 w-4" /> Quotify
             </ButtonLink>
-          )
+            {can(session.role, "quotations:review") && (
+              <ButtonLink href="/quotations/new" variant="primary" size="sm">
+                <Plus className="h-4 w-4" /> New quotation
+              </ButtonLink>
+            )}
+          </div>
         }
       />
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
