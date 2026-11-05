@@ -54,7 +54,7 @@ export function DutyHistory({ initial }: { initial: DutySummary[] }) {
   return (
     <Card>
       <CardHeader
-        title="Location sharing — on/off history"
+        title="Location sharing: on/off history"
         subtitle="When each rep switched duty-sharing on and off, and any permission denials"
         action={
           <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5">

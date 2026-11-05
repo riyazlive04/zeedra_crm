@@ -12,6 +12,9 @@ export interface Session {
   role: RoleName;
   name: string;
   email: string;
+  /** Effective module keys and permissions (from the DB, per request). */
+  modules?: string[];
+  perms?: import("./rbac").Permission[];
 }
 
 function secretKey(): Uint8Array {

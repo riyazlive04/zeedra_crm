@@ -51,7 +51,7 @@ export function SolarEstimate({ r, loan, dense, layout }: { r: SizingResult; loa
         </div>
       )}
       <div className="flex items-center gap-2 text-xs text-emerald-700">
-        <Leaf className="h-3.5 w-3.5" /> Avoids {r.co2TonnesPerYear} t CO₂/year — like planting {formatNumber(r.treesEquivalent)} trees
+        <Leaf className="h-3.5 w-3.5" /> Avoids {r.co2TonnesPerYear} t CO₂/year, like planting {formatNumber(r.treesEquivalent)} trees
       </div>
       {r.warnings.length > 0 && (
         <ul className="space-y-1.5">

@@ -42,7 +42,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       take: pageSize,
       include: { assignedTo: { select: { name: true, avatarColor: true } } },
     }),
-    can(session.role, "leads:view_all")
+    can(session, "leads:view_all")
       ? db.user.findMany({ where: { organizationId: session.orgId, active: true, role: { not: "INSTALLER" } }, select: { id: true, name: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
   ]);
@@ -66,7 +66,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
               </span>
               Disqualified leads
             </Link>
-            {can(session.role, "leads:edit") && (
+            {can(session, "leads:edit") && (
               <ButtonLink href="/leads/new" variant="primary">
                 + New Lead
               </ButtonLink>
@@ -75,7 +75,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         }
       />
       <Card>
-        <LeadFilters users={users} canImport={can(session.role, "leads:import")} canExport={can(session.role, "reports:view")} />
+        <LeadFilters users={users} canImport={can(session, "leads:import")} canExport={can(session, "reports:view")} />
         {leads.length === 0 ? (
           <EmptyState icon={<Users className="h-5 w-5" />} title="No leads found" body="Try clearing filters, import a CSV, or connect your website form." />
         ) : (
@@ -115,10 +115,10 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                           <span className="text-xs text-slate-400">Unassigned</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{l.monthlyBill ? l.monthlyBill.toLocaleString("en-IN") : <span className="text-slate-300">—</span>}</td>
-                      <td className="px-3 py-3 text-slate-600">{l.city ?? l.district ?? <span className="text-slate-300">—</span>}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{l.monthlyBill ? l.monthlyBill.toLocaleString("en-IN") : <span className="text-slate-300">-</span>}</td>
+                      <td className="px-3 py-3 text-slate-600">{l.city ?? l.district ?? <span className="text-slate-300">-</span>}</td>
                       <td className="px-4 py-2">
-                        <LeadRowActions id={l.id} name={l.name} phone={l.phone} email={l.email} canDelete={can(session.role, "leads:delete")} canQuote={can(session.role, "quotations:create")} />
+                        <LeadRowActions id={l.id} name={l.name} phone={l.phone} email={l.email} canDelete={can(session, "leads:delete")} canQuote={can(session, "quotations:create")} />
                       </td>
                     </tr>
                   ))}

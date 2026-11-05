@@ -285,7 +285,7 @@ export function QuotationDocument({
             We thank you for giving us this opportunity to be of service to you. Further to your discussion, find below our quotation for <b>{r.actualKw} kW</b> {r.structLabel} for your residence.
           </p>
           <p>
-            Our solar panels carry a <b>30-year performance warranty</b>, ensuring long-term reliability — and the savings projections in this document are backed by that guarantee.
+            Our solar panels carry a <b>30-year performance warranty</b>, so you can count on them for the long term. The savings projections in this document are backed by that guarantee.
           </p>
           <p>You can be rest assured of the quality of the product and we assure you of our best services while meeting your requirements.</p>
           <p>Feel free to get in touch with the undersigned in case of any further queries and clarifications.</p>
@@ -453,7 +453,7 @@ export function QuotationDocument({
         </div>
 
         <div className="mb-2 mt-5 flex items-center justify-between">
-          <div className="text-[8pt] font-bold uppercase tracking-wider text-slate-500">Breakeven Chart — Net Position Over 30 Years</div>
+          <div className="text-[8pt] font-bold uppercase tracking-wider text-slate-500">Breakeven Chart: Net Position Over 30 Years</div>
           <div className="flex gap-3 text-[7.5pt] text-slate-600">
             {[
               ["#ef4444", "Pre-Breakeven"],
@@ -484,15 +484,15 @@ export function QuotationDocument({
               </p>
             </TermBlock>
             <TermBlock title="Project Timeline">
-              <p>Materials Delivery — 1–2 weeks after order confirmation</p>
-              <p>Installation — 1 week</p>
-              <p>Net Metering Processing — 3–4 weeks</p>
+              <p>Materials Delivery: 1–2 weeks after order confirmation</p>
+              <p>Installation: 1 week</p>
+              <p>Net Metering Processing: 3–4 weeks</p>
             </TermBlock>
             {isDcr && (
               <TermBlock title="Government Subsidy (PM Surya Ghar)">
                 <p>We will facilitate the Subsidy Process. Subsidy will be directly credited to your bank account by DISCOM after successful installation and inspection.</p>
                 <p>
-                  <b>Central (PM Surya Ghar):</b> ₹30,000 per kW up to 2 kW, ₹18,000 for the 3rd kW — maximum <b>₹78,000</b> for 3 kW and above.
+                  <b>Central (PM Surya Ghar):</b> ₹30,000 per kW up to 2 kW, ₹18,000 for the 3rd kW, up to a maximum of <b>₹78,000</b> for 3 kW and above.
                 </p>
                 {snap.stateSubsidy && (
                   <p>
@@ -542,10 +542,10 @@ export function QuotationDocument({
                 <b>Free AMC: 5 Years</b> (as per MNRE Guidelines)
               </p>
               <p className="pt-2">
-                <b>Inverter</b> — 7–10 Years Warranty
+                <b>Inverter</b>: 7–10 Years Warranty
               </p>
               <p className="pt-2">
-                <b>Balance Of System</b> — 1 Year Warranty
+                <b>Balance Of System</b>: 1 Year Warranty
               </p>
               <p className="pt-2">
                 Parts and Components, which are repaired or replaced during such period, are warranted for the original warranty period only. The warranty shall not apply to defects resulting from:

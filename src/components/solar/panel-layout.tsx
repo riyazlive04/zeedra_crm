@@ -81,7 +81,7 @@ export function PanelLayoutPreview({ panelCount, panelWattage, systemKw, classNa
         )}
       </svg>
       <p className="mt-2 text-center text-[11px] text-slate-500">
-        Layout — {g.panelCount} panel{g.panelCount === 1 ? "" : "s"}
+        Layout: {g.panelCount} panel{g.panelCount === 1 ? "" : "s"}
         {panelWattage ? ` × ${panelWattage} Wp` : ""}
         {systemKw ? ` (${systemKw} kWp)` : ""}. Illustrative, not a shading or roof survey.
       </p>

@@ -23,7 +23,7 @@ async function load(orgId: string, id: string) {
 
 export const GET = route<P>(null, async ({ session, params }) => {
   const q = await load(session.orgId, params.id);
-  if (!can(session.role, "quotations:review") && q.createdById !== session.userId && q.lead.assignedToId !== session.userId)
+  if (!can(session, "quotations:review") && q.createdById !== session.userId && q.lead.assignedToId !== session.userId)
     throw new ApiError(404, "Quotation not found");
   return q;
 });
@@ -40,11 +40,11 @@ export const POST = route<P>("quotations:create", async ({ req, session, params 
   const body = await parseBody(req, schema);
   const q = await load(session.orgId, params.id);
   const isOwner = q.createdById === session.userId || q.lead.assignedToId === session.userId;
-  if (!isOwner && !can(session.role, "quotations:review")) throw new ApiError(403, "Not your quotation");
+  if (!isOwner && !can(session, "quotations:review")) throw new ApiError(403, "Not your quotation");
 
   switch (body.action) {
     case "send": {
-      if (q.status === "EXPIRED") throw new ApiError(400, "Quotation has expired — create a new version");
+      if (q.status === "EXPIRED") throw new ApiError(400, "This quotation has expired. Please create a new version");
       const updated = await db.quotation.update({
         where: { id: q.id },
         data: { status: "SENT", sentAt: new Date(), shareToken: q.shareToken ?? crypto.randomBytes(18).toString("base64url") },
@@ -79,7 +79,7 @@ export const POST = route<P>("quotations:create", async ({ req, session, params 
       return updated;
     }
     case "review": {
-      if (!can(session.role, "quotations:review")) throw new ApiError(403, "Only managers can review validations");
+      if (!can(session, "quotations:review")) throw new ApiError(403, "Only managers can review validations");
       if (body.pinSiteFromCapture) {
         if (q.capturedLat == null || q.capturedLng == null) throw new ApiError(400, "No GPS capture on this quotation");
         await db.lead.update({ where: { id: q.leadId }, data: { lat: q.capturedLat, lng: q.capturedLng, sitePinned: true } });
@@ -88,7 +88,7 @@ export const POST = route<P>("quotations:create", async ({ req, session, params 
         where: { id: q.id },
         data: {
           reviewedById: session.userId,
-          reviewNote: `${body.approve ? "Approved" : "Rejected"}${body.note ? ` — ${body.note}` : ""}`,
+          reviewNote: `${body.approve ? "Approved" : "Rejected"}${body.note ? `: ${body.note}` : ""}`,
           ...(body.approve && body.pinSiteFromCapture ? { geoVerdict: "VERIFIED" as const, distanceFromSiteM: 0 } : {}),
         },
       });

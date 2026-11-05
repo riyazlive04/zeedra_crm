@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { verifyMetaSignature } from "@/lib/whatsapp";
 import { createLead } from "@/lib/services/leads";
 import { fireTrigger } from "@/lib/automation/engine";
+import { handleInboundForFlows } from "@/lib/nurture/engine";
 import { logActivity, notify } from "@/lib/activity";
 
 /** Meta webhook verification handshake. */
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest) {
         await db.lead.update({ where: { id: lead.id }, data: { lastContactAt: new Date() } });
         await logActivity({ orgId: org.id, leadId: lead.id, type: "WHATSAPP", title: "WhatsApp received", body: text });
         if (lead.assignedToId) await notify(org.id, lead.assignedToId, `💬 ${lead.name}`, text.slice(0, 140), `/whatsapp?lead=${lead.id}`);
+        // Flows first: opt-out, reply branches, keyword bots. A failure here must not lose the message.
+        await handleInboundForFlows(org.id, lead.id, text).catch((e) => console.error("[flows] inbound failed", e));
         await fireTrigger("WHATSAPP_RECEIVED", { orgId: org.id, leadId: lead.id, refKey: `wa-in:${m.id}` });
       }
     }

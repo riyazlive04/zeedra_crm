@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta", weight: ["600", "700", "800"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: `${BRAND.product} — Solar CRM`, template: `%s · ${BRAND.product}` },
+  title: { default: `${BRAND.product} | Solar CRM`, template: `%s · ${BRAND.product}` },
   description: `${BRAND.tagline}. Built by ${BRAND.builtBy}.`,
   applicationName: BRAND.product,
   icons: { icon: "/icon.svg" },

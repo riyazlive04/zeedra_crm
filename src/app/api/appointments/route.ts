@@ -9,7 +9,7 @@ export const GET = route(null, async ({ req, session }) => {
   const from = q.get("from") ? new Date(q.get("from")!) : new Date(Date.now() - 7 * 86_400_000);
   const to = q.get("to") ? new Date(q.get("to")!) : new Date(Date.now() + 30 * 86_400_000);
   const where: Prisma.AppointmentWhereInput = { organizationId: session.orgId, startAt: { gte: from, lte: to } };
-  if (!can(session.role, "leads:view_all")) where.assignedToId = session.userId;
+  if (!can(session, "leads:view_all")) where.assignedToId = session.userId;
   else if (q.get("userId")) where.assignedToId = q.get("userId")!;
   if (q.get("status")) where.status = q.get("status") as Prisma.AppointmentWhereInput["status"];
   return db.appointment.findMany({

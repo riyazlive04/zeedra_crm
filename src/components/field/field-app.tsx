@@ -95,8 +95,8 @@ export function FieldApp({ appointments, name }: { appointments: FieldAppt[]; na
         body: { action: "checkIn", capture: fix },
       });
       setChecks((c) => ({ ...c, [a.id]: r.validation.checks }));
-      if (r.validation.verdict === "VERIFIED") toast.success("Checked in — location verified ✓");
-      else toast.info(`Checked in — ${humanize(r.validation.verdict)}`, "Your manager will see this flag.");
+      if (r.validation.verdict === "VERIFIED") toast.success("Checked in, location verified ✓");
+      else toast.info(`Checked in: ${humanize(r.validation.verdict)}`, "Your manager will see this flag.");
       router.refresh();
     } catch (e) {
       toast.error("Check-in failed", e instanceof Error ? e.message : undefined);
@@ -272,7 +272,7 @@ function CompleteModal({ appt, onClose }: { appt: FieldAppt | null; onClose: () 
       <label className="label">Visit outcome</label>
       <textarea className="input min-h-[110px]" value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="Roof condition, usable area, shading, customer's decision, next step…" />
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {["Roof OK — quotation shared", "Needs family discussion", "Loan documents collected", "Roof needs repair first", "Shading issue — resize"].map((s) => (
+        {["Roof OK, quotation shared", "Needs family discussion", "Loan documents collected", "Roof needs repair first", "Shading issue, needs resizing"].map((s) => (
           <button key={s} type="button" onClick={() => setOutcome((o) => (o ? `${o}. ${s}` : s))} className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 hover:border-sun-400">
             {s}
           </button>

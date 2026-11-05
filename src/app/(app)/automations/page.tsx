@@ -22,7 +22,7 @@ export default async function AutomationsPage() {
 
   return (
     <div>
-      <PageHeader title="Automations" subtitle="Your sales playbook on autopilot — WhatsApp replies, reminders, follow-ups and alerts." />
+      <PageHeader title="Automations" subtitle="Your sales playbook on autopilot: WhatsApp replies, reminders, follow-ups and alerts." />
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3">
         <StatCard label="Active automations" value={`${rules.filter((r) => r.active).length}/${rules.length}`} icon={<Zap className="h-4 w-4" />} />
         <StatCard label="Automated WhatsApp (7d)" value={autoMsgs} icon={<MessageCircle className="h-4 w-4" />} tone="green" />

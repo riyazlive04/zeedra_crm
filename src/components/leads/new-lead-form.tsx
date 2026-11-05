@@ -159,7 +159,7 @@ export function NewLeadForm({ settings, users, canAssign }: { settings: OrgSetti
                 <Button type="button" size="sm" onClick={lookup} loading={geoLoading}>
                   <Search className="h-3.5 w-3.5" /> Find address on map
                 </Button>
-                <span className="text-xs text-slate-500">{f.lat ? `Pinned at ${f.lat.toFixed(5)}, ${f.lng!.toFixed(5)} — tap the map to adjust` : "Or tap the map to drop the pin"}</span>
+                <span className="text-xs text-slate-500">{f.lat ? `Pinned at ${f.lat.toFixed(5)}, ${f.lng!.toFixed(5)}. Tap the map to adjust` : "Or tap the map to drop the pin"}</span>
               </div>
               {geo.length > 1 && (
                 <select className="input mb-2 text-xs" onChange={(e) => { const g = geo[Number(e.target.value)]; setF((x) => ({ ...x, lat: g.lat, lng: g.lng })); }}>
@@ -197,7 +197,7 @@ export function NewLeadForm({ settings, users, canAssign }: { settings: OrgSetti
               <Field label="Monthly EB bill">
                 <NumberInput prefix="₹" value={f.monthlyBill} onChange={(v) => set("monthlyBill", v)} placeholder="2500" />
               </Field>
-              <Field label="Monthly units" hint="Optional — more accurate than bill">
+              <Field label="Monthly units" hint="Optional, but more accurate than the bill">
                 <NumberInput suffix="kWh" value={f.monthlyUnits} onChange={(v) => set("monthlyUnits", v)} />
               </Field>
               <Field label="Sanctioned load">

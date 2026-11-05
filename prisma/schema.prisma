@@ -56,6 +56,9 @@ model Organization {
   notifications Notification[]
   counters      Counter[]
   solarDesigns  SolarDesign[]
+  flows         Flow[]
+  flowRuns      FlowRun[]
+  broadcasts    Broadcast[]
   agreements    Agreement[]
 
   @@index([metaPageId])
@@ -80,6 +83,8 @@ model User {
   role           Role     @default(FIELD_SALES)
   active         Boolean  @default(true)
   territory      String?
+  /// Module keys this user can open (src/lib/modules.ts). null = the role's defaults.
+  modules        Json?
   avatarColor    String   @default("#f59e0b")
   // Google Calendar OAuth (per salesperson)
   googleEmail        String?
@@ -289,6 +294,7 @@ model Lead {
   tasks        Task[]
   project      Project?
   solarDesigns SolarDesign[]
+  flowRuns     FlowRun[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -627,6 +633,10 @@ model WhatsAppMessage {
   error          String?
   automated      Boolean  @default(false)
   sentById       String?
+  /// Nurture analytics: which flow / node / broadcast sent this message.
+  flowId         String?
+  flowNodeId     String?
+  broadcastId    String?
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -634,6 +644,8 @@ model WhatsAppMessage {
 
   @@index([organizationId, leadId, createdAt])
   @@index([organizationId, phone])
+  @@index([flowId, flowNodeId])
+  @@index([broadcastId])
 }
 
 // ─── Automations ─────────────────────────────────────────────────────────
@@ -784,4 +796,90 @@ model SolarDesign {
 
   @@index([organizationId, updatedAt])
   @@index([leadId])
+}
+
+// ─── WhatsApp nurture: visual flows (mind-map) & broadcasts ──────────────
+
+/// A branching WhatsApp journey drawn as a mind map. `graph` is FlowGraph (src/lib/nurture/types.ts):
+/// nodes (trigger, message, wait, wait-for-reply, condition, action, end) + edges between their handles.
+model Flow {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  active         Boolean  @default(false)
+  graph          Json
+  /// FlowSettings: {stopOnReply, stopStages[], quietStart, quietEnd, reentry}
+  settings       Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  runs         FlowRun[]
+
+  @@index([organizationId, active])
+}
+
+/// One lead travelling through one flow.
+model FlowRun {
+  id             String    @id @default(cuid())
+  organizationId String
+  flowId         String
+  leadId         String
+  status         String    @default("ACTIVE") // ACTIVE | WAITING_REPLY | COMPLETED | STOPPED | FAILED
+  currentNodeId  String?
+  nextRunAt      DateTime?
+  stopReason     String?
+  startedAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flow         Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  steps        FlowStep[]
+
+  @@index([status, nextRunAt])
+  @@index([flowId, status])
+  @@index([leadId, status])
+}
+
+/// Audit trail of nodes a run passed through — drives the per-node counts on the mind map.
+model FlowStep {
+  id        String   @id @default(cuid())
+  runId     String
+  flowId    String
+  nodeId    String
+  outcome   String? // e.g. "sent", "yes", "no", "option:0", "timeout", "failed: …"
+  createdAt DateTime @default(now())
+
+  run FlowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([flowId, nodeId])
+  @@index([runId])
+}
+
+/// One-off send of a template (or a flow start) to a filtered audience.
+model Broadcast {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  templateKey    String?
+  flowId         String?
+  /// Audience filters: {stage[], temperature[], segment[], source[], city, minBill}
+  audience       Json
+  status         String    @default("SCHEDULED") // SCHEDULED | SENDING | SENT | CANCELLED
+  scheduledAt    DateTime  @default(now())
+  total          Int       @default(0)
+  processed      Int       @default(0)
+  failed         Int       @default(0)
+  /// Lead ids still to process (snapshot taken when sending starts).
+  queue          Json?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+  @@index([organizationId, createdAt])
 }

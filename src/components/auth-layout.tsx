@@ -3,7 +3,7 @@ import { BadgeCheck, MapPinned, MessageCircle, Sparkles, CalendarCheck2, Calcula
 import { BRAND } from "@/lib/brand";
 
 const POINTS = [
-  { icon: Calculator, title: "EB bill → system size in seconds", body: "kW, panels, PM Surya Ghar subsidy, savings and EMI — automatically." },
+  { icon: Calculator, title: "EB bill → system size in seconds", body: "kW, panels, PM Surya Ghar subsidy, savings and EMI, worked out automatically." },
   { icon: Sparkles, title: "AI lead scoring & coaching", body: "Hot / Warm / Cold with the next best action for every lead." },
   { icon: MessageCircle, title: "WhatsApp on autopilot", body: "Instant replies, estimates, reminders and follow-ups." },
   { icon: CalendarCheck2, title: "Google Calendar booking", body: "Conflict-free site visits synced to every salesperson." },

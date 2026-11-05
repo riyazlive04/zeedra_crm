@@ -17,7 +17,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
   if (!d) notFound();
   return (
     <DesignEditor
-      canEdit={can(session.role, "leads:edit")}
+      canEdit={can(session, "leads:edit")}
       init={{ id: d.id, name: d.name, data: parseDesign(d.data, { lat: d.lat, lng: d.lng }), lead: d.lead, shareToken: d.shareToken }}
     />
   );

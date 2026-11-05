@@ -73,7 +73,7 @@ export function TasksBoard({ tasks, showAssignee, team, meId }: { tasks: TaskIte
     <div className="space-y-4">
       <Card className="p-3">
         <form onSubmit={add} className="flex flex-wrap gap-2">
-          <input className="input min-w-[14rem] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add a task — e.g. Call Ravi about loan documents" />
+          <input className="input min-w-[14rem] flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add a task, e.g. Call Ravi about loan documents" />
           <input type="datetime-local" className="input w-auto" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due" />
           {team && (
             <select className="input w-auto" value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Assign to">

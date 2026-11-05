@@ -180,7 +180,7 @@ export function RegisterForm() {
         Create workspace
       </Button>
       <p className="text-center text-xs text-slate-500">
-        Includes WhatsApp templates, automation playbook and PM Surya Ghar pricing — ready on day one.
+        Includes WhatsApp templates, automation playbook and PM Surya Ghar pricing, ready on day one.
       </p>
       <p className="text-center text-sm text-slate-500">
         Already have an account?{" "}

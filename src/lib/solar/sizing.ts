@@ -183,8 +183,8 @@ export function boqCosts(
   const bom = s.bomRates;
   const perKwLines: [string, string, string][] = [
     ["mounting", "Mounting structure", "mountingPerKw"],
-    ["dcdb", "DCDB — DC distribution box", "dcdbPerKw"],
-    ["acdb", "ACDB — AC distribution box", "acdbPerKw"],
+    ["dcdb", "DCDB (DC distribution box)", "dcdbPerKw"],
+    ["acdb", "ACDB (AC distribution box)", "acdbPerKw"],
     ["dcCable", "DC cable", "dcCablePerKw"],
     ["acCable", "AC copper cable", "acCablePerKw"],
     ["misc", "Miscellaneous hardware", "miscPerKw"],

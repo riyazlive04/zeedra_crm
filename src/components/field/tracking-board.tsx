@@ -48,7 +48,7 @@ export function TrackingBoard({ team, quotes, focusQuote, geofenceM }: { team: T
     const circles: { lat: number; lng: number; radiusM: number; color?: string }[] = [];
     if (fq && fq.capturedLat != null && fq.capturedLng != null) {
       if (fq.lead.lat != null && fq.lead.lng != null) {
-        markers.push({ id: "site", lat: fq.lead.lat, lng: fq.lead.lng, color: "#ea580c", label: `${fq.lead.name} — site` });
+        markers.push({ id: "site", lat: fq.lead.lat, lng: fq.lead.lng, color: "#ea580c", label: `${fq.lead.name} · site` });
         circles.push({ lat: fq.lead.lat, lng: fq.lead.lng, radiusM: geofenceM });
         lines.push({ points: [[fq.lead.lat, fq.lead.lng], [fq.capturedLat, fq.capturedLng]], color: "#dc2626", dashed: true });
       }
@@ -98,7 +98,7 @@ export function TrackingBoard({ team, quotes, focusQuote, geofenceM }: { team: T
                     <div className="truncate text-[11px] text-slate-500">{m.last ? <>Seen <TimeAgo date={m.last.createdAt} /></> : "No location today"}</div>
                   </div>
                   <div className="text-right">
-                    <div className={clsx("text-sm font-semibold tabular-nums", pct == null ? "text-slate-300" : pct >= 90 ? "text-emerald-700" : pct >= 70 ? "text-amber-700" : "text-rose-700")}>{pct == null ? "—" : `${pct}%`}</div>
+                    <div className={clsx("text-sm font-semibold tabular-nums", pct == null ? "text-slate-300" : pct >= 90 ? "text-emerald-700" : pct >= 70 ? "text-amber-700" : "text-rose-700")}>{pct == null ? "-" : `${pct}%`}</div>
                     <div className="text-[10px] text-slate-400">{m.stats.quotes} quotes</div>
                   </div>
                 </button>
@@ -111,7 +111,7 @@ export function TrackingBoard({ team, quotes, focusQuote, geofenceM }: { team: T
       <div className="space-y-6">
         <Card className="p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <div className="text-sm font-semibold">{fq ? `${fq.number} — captured ${fq.distanceFromSiteM ?? "?"} m from site` : selected ? `${team.find((t) => t.id === selected)?.name}'s route today` : "Team positions & routes today"}</div>
+            <div className="text-sm font-semibold">{fq ? `${fq.number}: captured ${fq.distanceFromSiteM ?? "?"} m from site` : selected ? `${team.find((t) => t.id === selected)?.name}'s route today` : "Team positions & routes today"}</div>
             {fq && (
               <button onClick={() => setFocus(null)} className="text-xs font-medium text-sun-700 hover:underline">
                 Back to team map
@@ -164,7 +164,7 @@ export function TrackingBoard({ team, quotes, focusQuote, geofenceM }: { team: T
                         <VerdictBadge value={q.geoVerdict} />
                         {q.reviewNote && <div className="mt-0.5 max-w-[14rem] truncate text-[11px] text-slate-500">{q.reviewNote}</div>}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">{q.distanceFromSiteM != null ? `${q.distanceFromSiteM.toLocaleString("en-IN")} m` : "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">{q.distanceFromSiteM != null ? `${q.distanceFromSiteM.toLocaleString("en-IN")} m` : "-"}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex justify-end gap-2">
                           {q.capturedLat != null && (

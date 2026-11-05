@@ -250,7 +250,7 @@ function RuleEditor({ rule, templates, onClose }: { rule: Rule | null; templates
           {scheduled && (
             <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
               <input type="number" min={5} className="input w-28" value={delay} onChange={(e) => setDelay(Number(e.target.value))} />
-              minutes ({describeDelay(delay)}) — checked by the scheduler every few minutes
+              minutes ({describeDelay(delay)}). The scheduler checks every few minutes.
             </div>
           )}
         </section>
@@ -262,7 +262,7 @@ function RuleEditor({ rule, templates, onClose }: { rule: Rule | null; templates
               <Plus className="h-3 w-3" /> Condition
             </Button>
           </div>
-          {conditions.length === 0 && <p className="text-xs text-slate-400">No conditions — runs for every matching event.</p>}
+          {conditions.length === 0 && <p className="text-xs text-slate-400">No conditions, so it runs for every matching event.</p>}
           <div className="space-y-2">
             {conditions.map((c, i) => {
               const meta = CONDITION_FIELDS[c.field];

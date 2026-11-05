@@ -49,7 +49,7 @@ export function DesignPreview({ data, title, customer, org, stats }: {
           )}
           <div className="mt-4 grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-slate-50 p-2"><div className="text-xs text-slate-500">Modules</div><div className="font-semibold">{stats.panelCount}</div></div>
-            <div className="rounded-lg bg-slate-50 p-2"><div className="text-xs text-slate-500">Est. yearly energy</div><div className="font-semibold">{stats.annualKwh ? `${Math.round(stats.annualKwh).toLocaleString("en-IN")} kWh` : "—"}</div></div>
+            <div className="rounded-lg bg-slate-50 p-2"><div className="text-xs text-slate-500">Est. yearly energy</div><div className="font-semibold">{stats.annualKwh ? `${Math.round(stats.annualKwh).toLocaleString("en-IN")} kWh` : "-"}</div></div>
             {stats.shadingLossPct != null && <div className="col-span-2 rounded-lg bg-slate-50 p-2"><div className="text-xs text-slate-500">Shading loss (annual)</div><div className="font-semibold">{stats.shadingLossPct.toFixed(1)}%</div></div>}
           </div>
           <h3 className="mb-3 mt-6 text-lg font-semibold">Sun path</h3>

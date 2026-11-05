@@ -131,7 +131,7 @@ export function validateFieldCapture(input: ValidationInput, s: OrgSettings): Va
         key: "sitePin",
         label: "Site pin confirmed",
         passed: false,
-        detail: "Site coordinates came from address geocoding — manager should confirm the pin.",
+        detail: "Site coordinates came from the address lookup, so a manager should confirm the pin.",
       });
     }
   }
@@ -145,7 +145,7 @@ export function validateFieldCapture(input: ValidationInput, s: OrgSettings): Va
       key: "clock",
       label: "Device time matches server",
       passed: ok,
-      detail: ok ? `Drift ${driftMin.toFixed(1)} min` : `Device clock off by ${Math.round(driftMin)} min — possible manipulation.`,
+      detail: ok ? `Drift ${driftMin.toFixed(1)} min` : `Device clock off by ${Math.round(driftMin)} min. It may have been changed.`,
     });
   }
 

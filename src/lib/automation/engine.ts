@@ -9,6 +9,7 @@ import { formatINR } from "../text";
 import { sendWhatsApp } from "../whatsapp";
 import { logActivity, notify } from "../activity";
 import { evaluateConditions, type Action, type Condition, type Trigger } from "./types";
+import { startFlowsForTrigger } from "../nurture/engine";
 
 type LeadWithUser = Lead & { assignedTo?: { name: string; phone: string | null } | null };
 
@@ -71,6 +72,8 @@ export interface FireContext {
  * thrown — automations must not break the user action that triggered them.
  */
 export async function fireTrigger(trigger: Trigger, ctx: FireContext): Promise<number> {
+  // WhatsApp nurture flows listen to the same events.
+  await startFlowsForTrigger(trigger, ctx).catch((e) => console.error("[flows] start failed", e));
   const rules = await db.automationRule.findMany({ where: { organizationId: ctx.orgId, trigger, active: true } });
   if (!rules.length) return 0;
 
@@ -113,7 +116,7 @@ export async function fireTrigger(trigger: Trigger, ctx: FireContext): Promise<n
         leadId: lead.id,
         type: "AUTOMATION",
         title: `Automation: ${rule.name}`,
-        body: errors.length ? `Completed with errors — ${errors.join("; ")}` : undefined,
+        body: errors.length ? `Completed with errors: ${errors.join("; ")}` : undefined,
       });
   }
   return ran;
@@ -142,7 +145,7 @@ async function runAction(action: Action, ctx: FireContext, lead: LeadWithUser | 
           organizationId: ctx.orgId,
           leadId: lead?.id,
           assignedToId: lead?.assignedToId,
-          title: lead ? `${action.title} — ${lead.name}` : action.title,
+          title: lead ? `${action.title} · ${lead.name}` : action.title,
           dueAt: new Date(Date.now() + action.dueInHours * 3_600_000),
           priority: action.priority ?? "NORMAL",
         },

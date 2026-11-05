@@ -25,6 +25,8 @@ export interface MapProps {
   onPick?: (lat: number, lng: number) => void;
   fitToMarkers?: boolean;
   height?: number | string;
+  /** "satellite" uses Esri World Imagery — better for picking an exact roof. */
+  tiles?: "streets" | "satellite";
 }
 
 function Fit({ points }: { points: [number, number][] }) {
@@ -44,14 +46,18 @@ function Picker({ onPick }: { onPick: (lat: number, lng: number) => void }) {
   return null;
 }
 
-export default function MapInner({ markers = [], circles = [], lines = [], center, zoom = 12, onPick, fitToMarkers = true, height = 320 }: MapProps) {
+export default function MapInner({ markers = [], circles = [], lines = [], center, zoom = 12, onPick, fitToMarkers = true, height = 320, tiles = "streets" }: MapProps) {
   const points: [number, number][] = [...markers.map((m) => [m.lat, m.lng] as [number, number]), ...lines.flatMap((l) => l.points)];
   const c: [number, number] = center ?? points[0] ?? [13.0827, 80.2707];
   const initialZoom = points.length === 1 && fitToMarkers ? 16 : zoom;
   return (
     <div style={{ height }} className="overflow-hidden rounded-xl border border-slate-200">
-      <MapContainer center={c} zoom={initialZoom} scrollWheelZoom style={{ height: "100%", width: "100%" }} className={onPick ? "cursor-crosshair" : undefined}>
-        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <MapContainer center={c} zoom={initialZoom} maxZoom={21} scrollWheelZoom style={{ height: "100%", width: "100%" }} className={onPick ? "cursor-crosshair" : undefined}>
+        {tiles === "satellite" ? (
+          <TileLayer key="sat" attribution="Imagery &copy; Esri, Maxar, Earthstar Geographics" url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" maxNativeZoom={19} maxZoom={21} />
+        ) : (
+          <TileLayer key="osm" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        )}
         {fitToMarkers && points.length > 0 && <Fit points={points} />}
         {onPick && <Picker onPick={onPick} />}
         {circles.map((ci, i) => (

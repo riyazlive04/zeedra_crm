@@ -7,7 +7,7 @@ import { can } from "@/lib/rbac";
 export const GET = route(null, async ({ req, session }) => {
   const q = searchParams(req);
   const where: Prisma.QuotationWhereInput = { organizationId: session.orgId };
-  if (!can(session.role, "quotations:review")) where.createdById = session.userId;
+  if (!can(session, "quotations:review")) where.createdById = session.userId;
   else if (q.get("userId")) where.createdById = q.get("userId")!;
   if (q.get("verdict")) where.geoVerdict = q.get("verdict") as Prisma.QuotationWhereInput["geoVerdict"];
   if (q.get("flagged") === "1") where.geoVerdict = { notIn: ["VERIFIED", "OFFICE_CREATED"] };

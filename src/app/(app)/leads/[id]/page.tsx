@@ -51,11 +51,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         messages={messages}
         me={session.userId}
         perms={{
-          assign: can(session.role, "leads:assign"),
-          reviewQuotes: can(session.role, "quotations:review"),
-          createQuote: can(session.role, "quotations:create"),
-          whatsapp: can(session.role, "whatsapp:send"),
-          edit: can(session.role, "leads:edit"),
+          assign: can(session, "leads:assign"),
+          reviewQuotes: can(session, "quotations:review"),
+          createQuote: can(session, "quotations:create"),
+          whatsapp: can(session, "whatsapp:send"),
+          edit: can(session, "leads:edit"),
         }}
       />
     </div>

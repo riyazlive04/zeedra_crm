@@ -103,7 +103,7 @@ export function ProjectsBoard({
                     <div className="text-[11px] font-mono text-slate-400">{p.code}</div>
                     <div className="truncate font-semibold text-slate-900">{p.lead.name}</div>
                     <div className="text-xs text-slate-500">
-                      {p.systemKw} kW · {p.lead.city ?? "—"}
+                      {p.systemKw} kW · {p.lead.city ?? "-"}
                     </div>
                   </div>
                   {p.manager && <Avatar name={p.manager.name} color={p.manager.avatarColor} size={26} />}
@@ -235,7 +235,7 @@ function ProjectModal({ p, users, team, workflow, onClose }: { p: ProjectItem; u
             </Field>
             <Field label="Project manager">
               <select className="input" value={manager} onChange={(e) => setManager(e.target.value)}>
-                <option value="">—</option>
+                <option value="">None</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -276,7 +276,7 @@ function ResponsibleBanner({ stage, team, workflow }: { stage: string; team: Tea
         </span>
       ) : (
         <span className="text-slate-500">
-          Nobody is configured for this stage yet —{" "}
+          Nobody is set up for this stage yet.{" "}
           <Link href="/settings?tab=workflow" className="font-medium text-sun-700 hover:underline">
             set it in Settings → Project workflow
           </Link>

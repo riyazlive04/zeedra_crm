@@ -23,7 +23,7 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
   if (!q.viewedAt) {
     await db.quotation.update({ where: { id: q.id }, data: { viewedAt: new Date() } });
     await logActivity({ orgId: q.organizationId, leadId: q.leadId, type: "QUOTATION", title: `Customer opened proposal ${q.number}` });
-    await notify(q.organizationId, q.lead.assignedToId ?? q.createdById, `👀 ${q.lead.name} opened the proposal`, `${q.number} — good time to call`, `/leads/${q.leadId}`);
+    await notify(q.organizationId, q.lead.assignedToId ?? q.createdById, `👀 ${q.lead.name} opened the proposal`, `${q.number} · good time to call`, `/leads/${q.leadId}`);
   }
   const s = parseSettings(q.organization.settings);
 

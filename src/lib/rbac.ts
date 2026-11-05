@@ -46,8 +46,13 @@ const MATRIX: Record<RoleName, Permission[]> = {
   INSTALLER: ["projects:manage"],
 };
 
-export function can(role: RoleName, p: Permission): boolean {
-  return MATRIX[role]?.includes(p) ?? false;
+/**
+ * Pass a session to honour per-user module access (its effective `perms`), or a bare role for the
+ * role's default rights.
+ */
+export function can(subject: RoleName | { role: RoleName; perms?: Permission[] }, p: Permission): boolean {
+  if (typeof subject === "object") return subject.perms ? subject.perms.includes(p) : (MATRIX[subject.role]?.includes(p) ?? false);
+  return MATRIX[subject]?.includes(p) ?? false;
 }
 
 /** Roles that only see leads assigned to them. */

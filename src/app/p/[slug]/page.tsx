@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const org = await db.organization.findUnique({ where: { slug }, select: { name: true } });
-  return { title: org ? `Rooftop solar — ${org.name}` : "Rooftop solar", description: "Get your free rooftop solar estimate with PM Surya Ghar subsidy in 30 seconds." };
+  return { title: org ? `Rooftop solar | ${org.name}` : "Rooftop solar", description: "Get your free rooftop solar estimate with PM Surya Ghar subsidy in 30 seconds." };
 }
 
 /** Hosted lead-capture landing page with an instant solar estimate. */
@@ -40,7 +40,7 @@ export default async function PublicLanding({ params, searchParams }: { params: 
             <h1 className="font-display text-4xl font-extrabold leading-tight sm:text-5xl">
               Cut your electricity bill by up to <span className="bg-gradient-to-r from-sun-300 to-orange-400 bg-clip-text text-transparent">90%</span> with rooftop solar.
             </h1>
-            <p className="mt-4 max-w-xl text-slate-300">Enter your monthly bill to see the right system size, government subsidy, monthly savings and EMI — instantly. Our solar advisor will then plan a free site survey.</p>
+            <p className="mt-4 max-w-xl text-slate-300">Enter your monthly bill to see the right system size, government subsidy, monthly savings and EMI instantly. Our solar advisor will then plan a free site survey.</p>
             <ul className="mt-8 grid gap-4 sm:grid-cols-3">
               {[
                 [ShieldCheck, "25-year performance warranty"],

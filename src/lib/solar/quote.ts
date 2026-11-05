@@ -31,7 +31,7 @@ export function buildLineItems(
 export const DEFAULT_TERMS = [
   "Prices include GST as shown. Subsidy under PM Surya Ghar is credited by the Government directly to the customer's bank account after commissioning and DISCOM inspection.",
   "Payment: 30% advance on booking, 60% on material delivery, 10% on commissioning (or as per loan disbursement schedule).",
-  "Warranty: Modules — 12 years product, 25-30 years linear performance. Inverter — 8-10 years. Workmanship — 5 years.",
+  "Warranty. Modules: 12 years product, 25-30 years linear performance. Inverter: 8-10 years. Workmanship: 5 years.",
   "Net-metering approval timelines depend on the DISCOM. Installation typically within 7–15 days of approval.",
   "Free first-year AMC with quarterly cleaning visits. Generation estimates are indicative and depend on weather and shading.",
 ].join("\n");

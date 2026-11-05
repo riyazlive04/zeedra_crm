@@ -30,7 +30,7 @@ export default async function PipelinePage() {
         title="Pipeline"
         subtitle={`${open.length} open deals · ${formatINRCompact(open.reduce((a, b) => a + (b.estimatedCost ?? 0), 0))} · ${open.reduce((a, b) => a + (b.recommendedKw ?? 0), 0).toFixed(1)} kW. Won/lost show the last 30 days. Drag cards to move stages.`}
       />
-      <Kanban leads={leads} canEdit={can(session.role, "leads:edit")} />
+      <Kanban leads={leads} canEdit={can(session, "leads:edit")} />
     </div>
   );
 }

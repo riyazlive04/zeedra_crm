@@ -7,6 +7,8 @@ import { ApiError } from "@/lib/errors";
 import { audit } from "@/lib/activity";
 import { can } from "@/lib/rbac";
 import { normalizePhone } from "@/lib/text";
+import { MODULE_KEYS } from "@/lib/modules";
+import { Prisma } from "@prisma/client";
 
 const schema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
@@ -17,6 +19,8 @@ const schema = z.object({
   password: z.string().min(8).max(200).optional(),
   currentPassword: z.string().max(200).optional(),
   pin: z.string().regex(/^\d{4,6}$/, "4-6 digit PIN").nullable().optional(),
+  /** null = back to the role's defaults. */
+  modules: z.array(z.enum(MODULE_KEYS as [string, ...string[]])).nullable().optional(),
 });
 
 /** Admins manage anyone; every user can edit their own name/phone/password. */
@@ -25,10 +29,11 @@ export const PATCH = route<{ id: string }>(null, async ({ req, session, params }
   const target = await db.user.findFirst({ where: { id: params.id, organizationId: session.orgId } });
   if (!target) throw new ApiError(404, "User not found");
   const self = target.id === session.userId;
-  const admin = can(session.role, "users:manage");
+  const admin = can(session, "users:manage");
   if (!self && !admin) throw new ApiError(403, "You can only edit your own profile");
 
-  if ((body.role || body.active !== undefined) && !admin) throw new ApiError(403, "Only admins can change roles or access");
+  if ((body.role || body.active !== undefined || body.modules !== undefined) && !admin) throw new ApiError(403, "Only admins can change roles or access");
+  if (body.modules !== undefined && target.role === "OWNER") throw new ApiError(400, "The owner always has access to every module");
   if (target.role === "OWNER" && (body.role && body.role !== "OWNER" || body.active === false)) throw new ApiError(400, "The owner account cannot be demoted or deactivated");
   if (body.role === "OWNER") throw new ApiError(400, "Ownership transfer is handled by support");
   if ((body.password || body.pin !== undefined) && self) {
@@ -44,6 +49,7 @@ export const PATCH = route<{ id: string }>(null, async ({ req, session, params }
       role: body.role,
       territory: body.territory,
       active: body.active,
+      modules: body.modules === undefined ? undefined : body.modules === null ? Prisma.DbNull : body.modules,
       passwordHash: body.password ? await hashPassword(body.password) : undefined,
       pinHash: body.pin !== undefined ? (body.pin ? await hashPassword(body.pin) : null) : undefined,
       pinSetAt: body.pin !== undefined ? (body.pin ? new Date() : null) : undefined,

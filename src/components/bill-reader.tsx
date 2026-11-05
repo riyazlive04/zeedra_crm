@@ -33,7 +33,7 @@ export function BillReader({ onExtract, compact }: { onExtract: (f: BillFields) 
       const r = await api<BillFields>("/api/ai/bill-extract", { form });
       onExtract(r);
       const period = r.billingPeriodMonths && r.billingPeriodMonths > 1 ? ` (bi-monthly bill converted to monthly)` : "";
-      toast.success(`Bill read — ${r.confidence} confidence`, `${r.monthlyUnits ?? "?"} units/month · ₹${r.monthlyBill ?? "?"}/month${period}`);
+      toast.success(`Bill read · ${r.confidence} confidence`, `${r.monthlyUnits ?? "?"} units/month · ₹${r.monthlyBill ?? "?"}/month${period}`);
       if (r.notes) toast.info("Note from AI", r.notes);
     } catch (e) {
       toast.error("Could not read the bill", e instanceof Error ? e.message : undefined);
@@ -69,7 +69,7 @@ export function BillReader({ onExtract, compact }: { onExtract: (f: BillFields) 
         ) : (
           <span>
             <span className="block text-sm font-semibold text-violet-800">{loading ? "Reading the bill…" : "Scan electricity bill with AI"}</span>
-            <span className="block text-xs text-violet-600/80">Photo or PDF — fills units, amount, load, DISCOM & consumer no.</span>
+            <span className="block text-xs text-violet-600/80">Photo or PDF. Fills in units, amount, load, DISCOM & consumer no.</span>
           </span>
         )}
       </button>

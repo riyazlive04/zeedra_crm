@@ -34,7 +34,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
     <div>
       <PageHeader
         title="WhatsApp"
-        subtitle="Every conversation with leads — automated and manual."
+        subtitle="Every conversation with your leads, automated and manual."
         actions={
           <Link href="/settings?tab=templates" className="text-sm font-medium text-sun-700 hover:underline">
             Manage templates

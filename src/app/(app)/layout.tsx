@@ -3,6 +3,9 @@ import { requirePageSession, getActiveUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can, ROLE_LABEL } from "@/lib/rbac";
 import { billingState } from "@/lib/billing/plans";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { MODULE_KEYS, homeFor, moduleForPath } from "@/lib/modules";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requirePageSession();
@@ -16,18 +19,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // requirePageSession() already redirected away if this user weren't active, so it's here.
   if (!user) throw new Error("Active user vanished mid-request");
   const billing = session.role === "OWNER" ? billingState(org) : null;
-  const r = session.role;
+  const modules = session.modules ?? [];
+  // Block pages of modules this user can't open (menu hiding alone isn't enough).
+  const path = (await headers()).get("x-pathname") ?? "";
+  const mod = moduleForPath(path);
+  if (mod && !modules.includes(mod)) redirect(`${homeFor(modules)}?denied=1`);
   const perms = {
-    dashboard: r !== "INSTALLER",
-    leads: r !== "INSTALLER",
-    field: can(r, "quotations:create"),
-    quotations: can(r, "quotations:create"),
-    whatsapp: can(r, "whatsapp:send"),
-    tracking: can(r, "tracking:view"),
-    projects: can(r, "projects:manage"),
-    automations: can(r, "automations:manage"),
-    settings: can(r, "settings:manage"),
-    createLead: can(r, "leads:edit"),
+    ...Object.fromEntries(MODULE_KEYS.map((k) => [k, modules.includes(k)])),
+    createLead: modules.includes("leads") && can(session, "leads:edit"),
     help: true,
   };
   const trialBanner =

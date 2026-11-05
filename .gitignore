@@ -17,3 +17,5 @@ npm-debug.log*
 /screenshots/
 !docs/user-guides/screenshots/
 docs/user-guides/._tmp-*.html
+
+/.next-verify/

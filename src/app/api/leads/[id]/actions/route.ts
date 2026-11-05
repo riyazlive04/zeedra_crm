@@ -36,7 +36,7 @@ export const POST = route<{ id: string }>("leads:edit", async ({ req, session, p
       return updated;
     }
     case "assign": {
-      if (!can(session.role, "leads:assign")) throw new ApiError(403, "Only managers can reassign leads");
+      if (!can(session, "leads:assign")) throw new ApiError(403, "Only managers can reassign leads");
       let name = "Unassigned";
       if (body.userId) {
         const u = await db.user.findFirst({ where: { id: body.userId, organizationId: session.orgId, active: true } });
@@ -50,7 +50,7 @@ export const POST = route<{ id: string }>("leads:edit", async ({ req, session, p
       return updated;
     }
     case "note": {
-      const title = body.kind === "CALL" ? `Call — ${(body.callOutcome ?? "CONNECTED").replace(/_/g, " ").toLowerCase()}` : "Note";
+      const title = body.kind === "CALL" ? `Call: ${(body.callOutcome ?? "CONNECTED").replace(/_/g, " ").toLowerCase()}` : "Note";
       const a = await logActivity({ orgId: session.orgId, leadId: lead.id, userId: session.userId, type: body.kind, title, body: body.body });
       const reached = body.kind === "CALL" && !["NO_ANSWER", "SWITCHED_OFF", "BUSY", "WRONG_NUMBER"].includes(body.callOutcome ?? "CONNECTED");
       await db.lead.update({
@@ -66,7 +66,7 @@ export const POST = route<{ id: string }>("leads:edit", async ({ req, session, p
       return a;
     }
     case "pinSite": {
-      if (!can(session.role, "quotations:review")) throw new ApiError(403, "Only managers can confirm the site location");
+      if (!can(session, "quotations:review")) throw new ApiError(403, "Only managers can confirm the site location");
       const updated = await db.lead.update({ where: { id: lead.id }, data: { lat: body.lat, lng: body.lng, sitePinned: true } });
       await logActivity({
         orgId: session.orgId,

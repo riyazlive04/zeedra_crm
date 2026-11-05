@@ -21,10 +21,10 @@ export default async function DesignsPage({ searchParams }: { searchParams: Prom
     }),
     leadId ? db.lead.findFirst({ where: { id: leadId, organizationId: session.orgId }, select: { id: true, name: true, code: true, lat: true, lng: true, address: true, city: true } }) : null,
   ]);
-  const canEdit = can(session.role, "leads:edit");
+  const canEdit = can(session, "leads:edit");
   return (
     <div>
-      <PageHeader title="Roof Design & Shading" subtitle="Draw the roof on satellite imagery, place modules, add obstructions and get an accurate year-round shading report — in 2D and 3D." />
+      <PageHeader title="Roof Design & Shading" subtitle="Draw the roof on satellite imagery, place modules, add obstructions and get an accurate year-round shading report, in 2D and 3D." />
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card className="overflow-hidden p-0">
           {designs.length === 0 ? (
@@ -47,10 +47,10 @@ export default async function DesignsPage({ searchParams }: { searchParams: Prom
                 {designs.map((d) => (
                   <tr key={d.id} className="border-t border-slate-100 hover:bg-slate-50">
                     <td className="px-4 py-3"><Link href={`/designs/${d.id}`} className="font-medium text-teal-700 hover:underline">{d.name}</Link></td>
-                    <td className="px-4 py-3 text-slate-600">{d.lead ? <Link href={`/leads/${d.lead.id}`} className="hover:underline">{d.lead.code} · {d.lead.name}</Link> : "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{d.lead ? <Link href={`/leads/${d.lead.id}`} className="hover:underline">{d.lead.code} · {d.lead.name}</Link> : "-"}</td>
                     <td className="px-4 py-3 text-right">{d.systemKw.toFixed(2)} kW</td>
                     <td className="px-4 py-3 text-right">{d.panelCount}</td>
-                    <td className="px-4 py-3 text-right">{d.shadingLossPct == null ? "—" : `${d.shadingLossPct.toFixed(1)}%`}</td>
+                    <td className="px-4 py-3 text-right">{d.shadingLossPct == null ? "-" : `${d.shadingLossPct.toFixed(1)}%`}</td>
                     <td className="px-4 py-3 text-right text-slate-500">{formatDistanceToNow(d.updatedAt, { addSuffix: true })}</td>
                   </tr>
                 ))}

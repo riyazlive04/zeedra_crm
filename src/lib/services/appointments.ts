@@ -65,7 +65,7 @@ export async function availableSlots(session: Session, userId: string, date: str
 function calendarPayload(appt: Appointment, lead: { name: string; phone: string; code: string; address: string | null; city: string | null; recommendedKw: number | null; monthlyBill: number | null; email: string | null }, tz: string) {
   const mapLink = lead.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.address} ${lead.city ?? ""}`)}` : "";
   return {
-    summary: `☀ ${humanize(appt.type)} — ${lead.name}`,
+    summary: `☀ ${humanize(appt.type)} · ${lead.name}`,
     description: [
       `Lead: ${lead.name} (${lead.code})`,
       `Phone: ${displayPhone(lead.phone)}`,
@@ -168,7 +168,7 @@ export async function updateAppointment(
 ) {
   const appt = await db.appointment.findFirst({ where: { id, organizationId: session.orgId }, include: { lead: true } });
   if (!appt) throw new ApiError(404, "Appointment not found");
-  if (appt.assignedToId !== session.userId && !can(session.role, "leads:assign")) throw new ApiError(403, "Not your appointment");
+  if (appt.assignedToId !== session.userId && !can(session, "leads:assign")) throw new ApiError(403, "Not your appointment");
 
   const startAt = patch.startAt ?? appt.startAt;
   const duration = patch.durationMinutes ?? (appt.endAt.getTime() - appt.startAt.getTime()) / 60_000;

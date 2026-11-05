@@ -36,8 +36,8 @@ export interface EditorInit {
 type Climate = { clearness: number[]; ghiMonthly: number[]; minC: number; maxC: number; source: string } | null;
 
 const ZONE_TYPES: { type: ZoneType; label: string; hint: string }[] = [
-  { type: "flat", label: "Flat / RCC", hint: "Concrete roof — modules on a tilted structure" },
-  { type: "tilted", label: "Tilted Roof", hint: "Sloped roof — modules flush on the slope" },
+  { type: "flat", label: "Flat / RCC", hint: "Concrete roof, modules on a tilted structure" },
+  { type: "tilted", label: "Tilted Roof", hint: "Sloped roof, modules flush on the slope" },
   { type: "shed", label: "Shed", hint: "Elevated structure on legs, clear of parapets" },
 ];
 
@@ -417,8 +417,8 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
       ["Modules", summary.panelCount],
       ["System size (kWp)", summary.systemKw],
       ["Roof area (m²)", summary.areaM2],
-      ["Shading loss — electrical, bypass-diode model (%)", r.shadingLossPct.toFixed(2)],
-      ["Shading loss — area only (%)", r.geometricLossPct.toFixed(2)],
+      ["Shading loss: electrical, bypass-diode model (%)", r.shadingLossPct.toFixed(2)],
+      ["Shading loss: area only (%)", r.geometricLossPct.toFixed(2)],
       ["Annual energy (kWh)", Math.round(r.annualKwh)],
       ["Specific yield (kWh/kWp)", Math.round(r.specificYield)],
       ["Weather", climate?.source ?? "Default clearness 0.75"],
@@ -569,7 +569,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
                     </button>
                     {addMenu === "blocker" && (
                       <div className="absolute z-20 mt-1 w-60 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
-                        {([["rect", "Rectangle", "Staircase / lift room, wall"], ["polygon", "Polygon", "Any shape — neighbouring building"], ["circle", "Circle", "Water tank, chimney"], ["tree", "Tree", "Tree or tall vegetation"]] as const).map(([k, l, h]) => (
+                        {([["rect", "Rectangle", "Staircase / lift room, wall"], ["polygon", "Polygon", "Any shape, like a neighbouring building"], ["circle", "Circle", "Water tank, chimney"], ["tree", "Tree", "Tree or tall vegetation"]] as const).map(([k, l, h]) => (
                           <button key={k} onClick={() => { setTool(k); setAddMenu(null); setView("2d"); }} className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50">
                             <span className="block text-sm font-medium">{l}</span><span className="block text-xs text-slate-500">{h}</span>
                           </button>
@@ -590,7 +590,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
                     ))}
                   </tbody>
                 </table>
-                {design.blockers.length === 0 && <div className="py-10 text-center text-sm text-slate-500"><div className="font-medium text-slate-700">No Blockers</div><div className="mt-1 text-xs">Add water tanks, staircase rooms, trees and neighbouring buildings — they drive the shading result.</div></div>}
+                {design.blockers.length === 0 && <div className="py-10 text-center text-sm text-slate-500"><div className="font-medium text-slate-700">No Blockers</div><div className="mt-1 text-xs">Add water tanks, staircase rooms, trees and neighbouring buildings. They decide the shading result.</div></div>}
               </div>
             ))}
 
@@ -798,10 +798,10 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
         <Modal title="Placing panels" onClose={() => setModal(null)}>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-600">
             <li>Zoom the map right onto the customer&apos;s roof (scroll / pinch).</li>
-            <li><b>Add Zone</b> → pick the roof type → click each roof corner. Finish by clicking the first corner or double-clicking. Edge lengths show as you draw — match them to your site measurements, then drag corners to correct.</li>
-            <li>Set the <b>zone height</b> (building height), parapet height and structure height — they decide what shades what.</li>
+            <li><b>Add Zone</b> → pick the roof type → click each roof corner. Finish by clicking the first corner or double-clicking. Edge lengths show as you draw. Match them to your site measurements, then drag corners to correct.</li>
+            <li>Set the <b>zone height</b> (building height), parapet height and structure height. They decide what shades what.</li>
             <li>Modules fill the roof automatically, respecting the setback and an auto row gap that avoids row-to-row shading between 9 am and 3 pm all year. Click any module to remove or restore it.</li>
-            <li>Add <b>Blockers</b>: water tanks, staircase rooms, trees, neighbouring buildings — with their real heights.</li>
+            <li>Add <b>Blockers</b>: water tanks, staircase rooms, trees and neighbouring buildings, with their real heights.</li>
             <li>Open <b>Shading → heatmap</b> for annual losses per module, and the <b>sun</b> button to scrub shadows through the day and year.</li>
             <li>In <b>Layout → Inverter</b>, add an inverter (or let Auto-string pick one) and string the modules; <b>Wire</b> sizes the DC/AC cables.</li>
           </ol>
@@ -988,7 +988,7 @@ function InverterPanel(p: {
       {p.inverters.length === 0 ? (
         <div className="py-6 text-center text-sm text-slate-500"><div className="font-medium text-slate-700">No Inverters</div><div className="mt-1 text-xs">Add one, or press Auto-string to pick a right-sized inverter automatically.</div></div>
       ) : (
-        <div className="text-xs text-slate-500">DC/AC ratio <b className={totalAc && (p.systemKw / totalAc > 1.35 || p.systemKw / totalAc < 0.9) ? "text-red-600" : "text-slate-700"}>{totalAc ? (p.systemKw / totalAc).toFixed(2) : "—"}</b> (aim 1.0–1.3){totalAc && p.systemKw / totalAc > 1.35 ? " — inverter undersized, expect clipping" : ""}</div>
+        <div className="text-xs text-slate-500">DC/AC ratio <b className={totalAc && (p.systemKw / totalAc > 1.35 || p.systemKw / totalAc < 0.9) ? "text-red-600" : "text-slate-700"}>{totalAc ? (p.systemKw / totalAc).toFixed(2) : "-"}</b> (aim 1.0–1.3){totalAc && p.systemKw / totalAc > 1.35 ? ". Inverter is undersized, expect clipping" : ""}</div>
       )}
       {p.inverters.map((iv, i) => {
         const lim = stringLimits(p.moduleModel, iv.model, p.temps);
@@ -1020,7 +1020,7 @@ function InverterPanel(p: {
       })}
       {p.inverters.length > 0 && (p.activeString ? (
         <div className="rounded-lg border-2 border-dashed border-teal-400 p-3 text-xs">
-          <div className="font-semibold">Drawing string — {p.activeString.length} modules</div>
+          <div className="font-semibold">Drawing string: {p.activeString.length} modules</div>
           <div className="mt-2 flex gap-2">
             <select value={p.activeTarget.inverterIndex} onChange={(e) => p.onTarget({ inverterIndex: Number(e.target.value), mppt: 0 })} className="flex-1 rounded border border-slate-200 px-1 py-1">
               {p.inverters.map((_, i) => <option key={i} value={i}>Inverter {i + 1}</option>)}
@@ -1154,7 +1154,7 @@ function ModulePicker({ custom, current, onPick, onAddCustom, onClose }: { custo
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-slate-400">Typical datasheet values — confirm against the datasheet of the lot you install, or add a custom module.</p>
+          <p className="mt-3 text-xs text-slate-400">Typical datasheet values. Check them against the datasheet of the lot you install, or add a custom module.</p>
         </>
       )}
     </Modal>
@@ -1236,7 +1236,7 @@ function DroneModal({ overlay, onSet, onOpacity, onRemove, onClose }: { overlay:
       c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
       c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
       onSet(c.toDataURL("image/jpeg", 0.82));
-      toast.success("Drone image placed — drag its two corner handles to line it up with the map");
+      toast.success("Drone image placed. Drag its two corner handles to line it up with the map");
       onClose();
     } catch {
       toast.error("Couldn't read that image");
@@ -1298,7 +1298,7 @@ function ResultsView({ r, climate }: { r: AnalysisResult; climate: Climate }) {
             <thead><tr className="text-left text-slate-500"><th>Module</th><th>Solar access</th><th>Area-only</th><th>Sky view</th><th className="text-right">kWh/yr</th></tr></thead>
             <tbody>{worst.map((p) => <tr key={p.index} className="border-t border-slate-100"><td className="py-1">{p.key}</td><td style={{ color: accessColor(p.solarAccess) }} className="font-semibold">{(p.solarAccess * 100).toFixed(1)}%</td><td>{(p.geometricAccess * 100).toFixed(1)}%</td><td>{(p.skyView * 100).toFixed(0)}%</td><td className="text-right">{Math.round(p.annualKwh)}</td></tr>)}</tbody>
           </table>
-          <p className="mt-1 text-xs text-slate-500">Tip: modules below ~80% usually cost more than they earn on a string inverter — remove them or move them, or use optimisers/micro-inverters.</p>
+          <p className="mt-1 text-xs text-slate-500">Tip: modules below ~80% usually cost more than they earn on a string inverter. Remove or move them, or use optimisers/micro-inverters.</p>
         </div>
       )}
       <p className="text-xs text-slate-400">

@@ -28,7 +28,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
 
   return (
     <div>
-      <PageHeader title="Installations" subtitle="From booking to subsidy credit — PM Surya Ghar portal, DISCOM approvals, net-metering and payments in one tracker." />
+      <PageHeader title="Installations" subtitle="From booking to subsidy credit: PM Surya Ghar portal, DISCOM approvals, net-metering and payments in one tracker." />
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatCard label="Active projects" value={active.length} icon={<Hammer className="h-4 w-4" />} />
         <StatCard label="Capacity in execution" value={`${active.reduce((a, p) => a + p.systemKw, 0).toFixed(1)} kW`} icon={<Zap className="h-4 w-4" />} tone="violet" />

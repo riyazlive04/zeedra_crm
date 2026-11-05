@@ -1,5 +1,7 @@
 "use client";
 
+import { MODULES, defaultModules } from "@/lib/modules";
+import type { RoleName } from "@/lib/session";
 import { TimeAgo } from "../time-ago";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -144,7 +146,7 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
               </Field>
               {s.centralSubsidyEnabled && (
                 <div className="sm:col-span-3">
-                  <div className="label mb-2">Claim type — rates are set once here and applied automatically from the lead/project segment</div>
+                  <div className="label mb-2">Claim type. Set the rates once here and they're applied automatically from the lead/project segment</div>
                   <Segmented
                     value={subsidyClaimType}
                     onChange={(v) => setSubsidyClaimType((v ?? "house") as "house" | "community")}
@@ -155,7 +157,7 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
                   />
                   {subsidyClaimType === "house" ? (
                     <div className="mt-3 space-y-2">
-                      <p className="text-xs text-slate-500">Residential rooftop (segment: Residential) — ₹/kW by system-size tier, capped at a max amount</p>
+                      <p className="text-xs text-slate-500">Residential rooftop (segment: Residential): ₹/kW by system-size tier, capped at a max amount</p>
                       {s.subsidyRates.house.tiers.map((tier, i) => (
                         <div key={i} className="flex items-center gap-2 text-sm">
                           <span className="w-16 text-slate-500">Up to</span>
@@ -212,7 +214,7 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
                     </div>
                   ) : (
                     <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                      <p className="text-xs text-slate-500 sm:col-span-2">Housing society / RWA common facilities, incl. EV charging (segment: Housing society) — flat rate per kW, capped at a max system size</p>
+                      <p className="text-xs text-slate-500 sm:col-span-2">Housing society / RWA common facilities, incl. EV charging (segment: Housing society): flat rate per kW, capped at a max system size</p>
                       <Field label="Rate per kW">
                         <NumberInput prefix="₹" value={s.subsidyRates.community.ratePerKw} onChange={(v) => setS((x) => ({ ...x, subsidyRates: { ...x.subsidyRates, community: { ...x.subsidyRates.community, ratePerKw: v ?? 0 } } }))} />
                       </Field>
@@ -224,7 +226,7 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
                 </div>
               )}
               <div className="sm:col-span-3">
-                <div className="label">State top-up subsidy by system size (e.g. Tamil Nadu G.O. 102) — flat amount, not per-kW</div>
+                <div className="label">State top-up subsidy by system size (e.g. Tamil Nadu G.O. 102). A flat amount, not per kW</div>
                 <div className="space-y-2">
                   {s.stateSubsidyTiers.map((tier, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
@@ -248,10 +250,10 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
             </div>
             <div>
               <div className="label">Panel rate & company margin</div>
-              <p className="mb-2 text-xs text-slate-500">The system price is built bottom-up: panels priced per watt, the inverter from the catalogue below, and balance-of-system from the rates further down — summed, then a margin and GST on top. The "Price per kWp" slabs above no longer drive pricing; they're kept only as a quick reference.</p>
+              <p className="mb-2 text-xs text-slate-500">The system price is built bottom-up: panels priced per watt, the inverter from the catalogue below, and balance-of-system from the rates further down. These are added up, then margin and GST go on top. The "Price per kWp" slabs above no longer drive pricing; they're kept only as a quick reference.</p>
               <div className="grid gap-4 sm:grid-cols-3">
                 {num("panelRatePerWatt", "Panel rate", "₹/Wp")}
-                {num("marginPct", "Company margin", "%", "Added on cost before GST — 0 for a passthrough quote")}
+                {num("marginPct", "Company margin", "%", "Added on cost before GST. Use 0 for a passthrough quote")}
               </div>
             </div>
             <div>
@@ -273,7 +275,7 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
             </div>
             <div>
               <div className="label">On-grid inverter prices by size</div>
-              <p className="mb-2 text-xs text-slate-500">Set once here, not re-entered per quote. Looked up by the inverter size sizing picks for the system — the next size up if there's no exact match, or extrapolated beyond the largest entry.</p>
+              <p className="mb-2 text-xs text-slate-500">Set once here, not re-entered per quote. Looked up by the inverter size sizing picks for the system: the next size up if there's no exact match, or extrapolated beyond the largest entry.</p>
               <div className="grid gap-6 sm:grid-cols-2">
                 {(["singlePhase", "threePhase"] as const).map((phaseKey) => (
                   <div key={phaseKey}>
@@ -351,8 +353,8 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
         <>
           <CardHeader title="Qualification & scoring" subtitle="Basic qualification thresholds and Hot/Warm/Cold cut-offs" />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
-            {num("minMonthlyBillResidential", "Min. monthly bill — residential", "₹")}
-            {num("minMonthlyBillCommercial", "Min. monthly bill — commercial/industrial", "₹")}
+            {num("minMonthlyBillResidential", "Min. monthly bill (residential)", "₹")}
+            {num("minMonthlyBillCommercial", "Min. monthly bill (commercial/industrial)", "₹")}
             <Field label="Require property ownership (residential)">
               <YesNo value={s.requireOwnership} onChange={(v) => setS((x) => ({ ...x, requireOwnership: v ?? true }))} />
             </Field>
@@ -379,8 +381,8 @@ export function RulesPanel({ settings, section }: { settings: OrgSettings; secti
             {num("maxGpsAccuracyM", "Max allowed GPS error", "m")}
             {num("maxClockDriftMin", "Max device-clock drift", "min", "Detects back-dated or manipulated phones")}
             {num("maxTravelSpeedKmph", "Max plausible travel speed", "km/h", "Detects mock-location apps")}
-            {num("appointmentWindowBeforeMin", "Slot window — before start", "min")}
-            {num("appointmentWindowAfterMin", "Slot window — after end", "min")}
+            {num("appointmentWindowBeforeMin", "Slot window before start", "min")}
+            {num("appointmentWindowAfterMin", "Slot window after end", "min")}
             <Field label="Require a booked appointment for field quotations" className="sm:col-span-2">
               <YesNo value={s.requireAppointmentForQuote} onChange={(v) => setS((x) => ({ ...x, requireAppointmentForQuote: v ?? false }))} />
             </Field>
@@ -460,7 +462,7 @@ export function WorkflowPanel({ settings, team }: { settings: OrgSettings; team:
                     <option value="">Unassigned</option>
                     {team.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} — {ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}
+                        {u.name} · {ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}
                       </option>
                     ))}
                   </select>
@@ -470,7 +472,7 @@ export function WorkflowPanel({ settings, team }: { settings: OrgSettings; team:
                     <option value="">None</option>
                     {team.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} — {ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}
+                        {u.name} · {ROLE_LABEL[u.role as keyof typeof ROLE_LABEL] ?? u.role}
                       </option>
                     ))}
                   </select>
@@ -514,11 +516,46 @@ export interface TeamUser {
   avatarColor: string;
   googleEmail: string | null;
   lastLoginAt: string | null;
+  /** Custom module access; null = role defaults. */
+  modules: string[] | null;
+}
+
+/** Tick-box grid of modules. `value` null means "follow the role's defaults". */
+function ModuleAccess({ role, value, onChange }: { role: string; value: string[] | null; onChange: (v: string[] | null) => void }) {
+  const defaults = defaultModules(role as RoleName);
+  const current = value ?? defaults;
+  const toggle = (k: string) => onChange(current.includes(k) ? current.filter((x) => x !== k) : [...current, k]);
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs text-slate-500">{value === null ? `Using the ${ROLE_LABEL[role as keyof typeof ROLE_LABEL] ?? role} defaults` : "Custom access"}</span>
+        <div className="flex gap-2 text-xs">
+          <button type="button" onClick={() => onChange(MODULES.map((m) => m.key))} className="font-medium text-sun-700 hover:underline">Select all</button>
+          {value !== null && <button type="button" onClick={() => onChange(null)} className="font-medium text-slate-500 hover:underline">Reset to role defaults</button>}
+        </div>
+      </div>
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {MODULES.map((m) => (
+          <label key={m.key} className={clsx("flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2", current.includes(m.key) ? "border-sun-300 bg-sun-50/60" : "border-slate-200")}>
+            <input type="checkbox" className="mt-0.5" checked={current.includes(m.key)} onChange={() => toggle(m.key)} />
+            <span>
+              <span className="block text-sm font-medium text-slate-800">{m.label}</span>
+              <span className="block text-[11px] text-slate-500">{m.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-slate-400">Profile and Help are always available. Whether someone sees every lead or only their own still follows their role.</p>
+    </div>
+  );
 }
 
 export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", role: "FIELD_SALES", territory: "", password: "" });
+  const [newModules, setNewModules] = useState<string[] | null>(null);
+  const [editing, setEditing] = useState<TeamUser | null>(null);
+  const [editModules, setEditModules] = useState<string[] | null>(null);
   const { save, busy } = useSaver();
   return (
     <Card>
@@ -529,6 +566,7 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
             <tr>
               <th className="px-5 py-2">User</th>
               <th className="px-3 py-2">Role</th>
+              <th className="px-3 py-2">Modules</th>
               <th className="px-3 py-2">Territory</th>
               <th className="px-3 py-2">Google Calendar</th>
               <th className="px-3 py-2">Last login</th>
@@ -560,12 +598,21 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
                     </select>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-xs text-slate-600">{u.territory ?? "—"}</td>
+                <td className="px-3 py-2.5 text-xs">
+                  {u.role === "OWNER" ? (
+                    <span className="text-slate-500">All modules</span>
+                  ) : (
+                    <button type="button" onClick={() => { setEditing(u); setEditModules(u.modules); }} className="rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-700 hover:border-sun-400 hover:bg-sun-50">
+                      {u.modules ? `Custom · ${u.modules.length}` : `Role default · ${defaultModules(u.role as RoleName).length}`} <span className="text-sun-700">Edit</span>
+                    </button>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-xs text-slate-600">{u.territory ?? "-"}</td>
                 <td className="px-3 py-2.5 text-xs">{u.googleEmail ? <span className="text-emerald-700">✓ {u.googleEmail}</span> : <span className="text-slate-400">Not connected</span>}</td>
                 <td className="px-3 py-2.5 text-xs text-slate-500">{u.lastLoginAt ? <TimeAgo date={u.lastLoginAt} /> : "Never"}</td>
                 <td className="px-5 py-2.5 text-right">
                   {u.role !== "OWNER" && u.id !== me && (
-                    <Button size="xs" variant={u.active ? "ghost" : "secondary"} onClick={() => save({ active: !u.active }, u.active ? "User deactivated — open leads returned to pool" : "User re-activated", `/api/users/${u.id}`)}>
+                    <Button size="xs" variant={u.active ? "ghost" : "secondary"} onClick={() => save({ active: !u.active }, u.active ? "User deactivated. Their open leads went back to the pool" : "User re-activated", `/api/users/${u.id}`)}>
                       {u.active ? "Deactivate" : "Activate"}
                     </Button>
                   )}
@@ -579,7 +626,7 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
         open={open}
         onClose={() => setOpen(false)}
         title="Add team member"
-        subtitle="Share the email and temporary password with them — they can change it in their profile."
+        subtitle="Share the email and temporary password with them. They can change it in their profile."
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancel</Button>
@@ -587,9 +634,10 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
               variant="primary"
               loading={busy}
               onClick={async () => {
-                if (await save({ ...f, phone: f.phone || undefined, territory: f.territory || undefined }, "User added", "/api/users", "POST")) {
+                if (await save({ ...f, phone: f.phone || undefined, territory: f.territory || undefined, modules: newModules }, "User added", "/api/users", "POST")) {
                   setOpen(false);
                   setF({ name: "", email: "", phone: "", role: "FIELD_SALES", territory: "", password: "" });
+                  setNewModules(null);
                 }
               }}
             >
@@ -624,6 +672,33 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
             <input className="input" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
           </Field>
         </div>
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="mb-2 text-sm font-semibold text-slate-800">Module access</div>
+          <ModuleAccess role={f.role} value={newModules} onChange={setNewModules} />
+        </div>
+      </Modal>
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        size="lg"
+        title={editing ? `Module access · ${editing.name}` : ""}
+        subtitle="Tick the modules this person can open. Changes apply on their next page load."
+        footer={
+          <>
+            <Button onClick={() => setEditing(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={busy}
+              onClick={async () => {
+                if (editing && (await save({ modules: editModules }, "Access updated", `/api/users/${editing.id}`))) setEditing(null);
+              }}
+            >
+              Save access
+            </Button>
+          </>
+        }
+      >
+        {editing && <ModuleAccess role={editing.role} value={editModules} onChange={setEditModules} />}
       </Modal>
     </Card>
   );
@@ -785,7 +860,7 @@ function MetaLeadsCard({ appUrl, meta }: { appUrl: string; meta: MetaLeadsState 
         body: action === "connect" ? { action, pageId, accessToken: token } : { action },
       });
       if (action === "connect") {
-        toast.success(`Connected ${r.pageName}`, `${r.sync?.created ?? 0} new leads imported from the last 30 days.${r.webhook ? "" : " Webhook not subscribed — leads arrive with each scheduled sync."}`);
+        toast.success(`Connected ${r.pageName}`, `${r.sync?.created ?? 0} new leads imported from the last 30 days.${r.webhook ? "" : " Webhook isn't subscribed, so leads arrive with each scheduled sync."}`);
         setToken("");
       } else if (action === "sync") toast.success("Facebook leads synced", `${r.created ?? 0} new of ${r.fetched ?? 0} checked.`);
       else toast.success("Facebook Page disconnected");
@@ -838,7 +913,7 @@ function MetaLeadsCard({ appUrl, meta }: { appUrl: string; meta: MetaLeadsState 
             <ul className="mt-1 list-disc pl-4">
               {meta.skipped.map((x, i) => (
                 <li key={i}>
-                  <TimeAgo date={x.at} /> — {x.error}
+                  <TimeAgo date={x.at} />: {x.error}
                 </li>
               ))}
             </ul>
@@ -901,7 +976,7 @@ export function TemplatesPanel({ templates }: { templates: Template[] }) {
   const [edit, setEdit] = useState<Template | "new" | null>(null);
   return (
     <Card>
-      <CardHeader title="WhatsApp templates" subtitle="Use {{variables}} — filled from the lead, sizing and appointment" action={<Button size="sm" variant="primary" onClick={() => setEdit("new")}><Plus className="h-4 w-4" /> New template</Button>} />
+      <CardHeader title="WhatsApp templates" subtitle="Use {{variables}}. They're filled in from the lead, sizing and appointment" action={<Button size="sm" variant="primary" onClick={() => setEdit("new")}><Plus className="h-4 w-4" /> New template</Button>} />
       <ul className="divide-y divide-slate-100">
         {templates.map((t) => (
           <li key={t.id} className="flex items-start gap-3 px-5 py-3">
@@ -1079,7 +1154,7 @@ export function ProfilePanel({
         </div>
       </Card>
       <Card>
-        <CardHeader title="Quick PIN login" subtitle={hasPin ? "Set — you can sign in with your email and this PIN instead of your password." : "Not set. A short PIN lets you sign in faster on a device you use often."} icon={<KeyRound className="h-4 w-4" />} />
+        <CardHeader title="Quick PIN login" subtitle={hasPin ? "All set. You can sign in with your email and this PIN instead of your password." : "Not set. A short PIN lets you sign in faster on a device you use often."} icon={<KeyRound className="h-4 w-4" />} />
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <Field label="Current password" hint="Required to change your PIN">
             <input className="input" type="password" value={pinCur} onChange={(e) => setPinCur(e.target.value)} autoComplete="current-password" />

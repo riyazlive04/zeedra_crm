@@ -18,7 +18,7 @@ export async function loadAgreementContext(session: Session, quotationId: string
   const q = await db.quotation.findFirst({ where: { id: quotationId, organizationId: session.orgId }, include: { lead: true, organization: true } });
   if (!q) throw new ApiError(404, "Quotation not found");
   const isOwner = q.createdById === session.userId || q.lead.assignedToId === session.userId;
-  if (!isOwner && !can(session.role, "quotations:review")) throw new ApiError(404, "Quotation not found");
+  if (!isOwner && !can(session, "quotations:review")) throw new ApiError(404, "Quotation not found");
   const rootId = q.parentId ?? q.id;
   const versions = await db.quotation.findMany({ where: { organizationId: session.orgId, OR: [{ id: rootId }, { parentId: rootId }] }, orderBy: { version: "desc" } });
   const accepted = versions.find((v) => v.status === "ACCEPTED") ?? null;

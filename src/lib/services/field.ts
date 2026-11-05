@@ -68,7 +68,7 @@ async function validate(
 export async function checkIn(session: Session, appointmentId: string, capture: FieldCapture | null) {
   const appt = await db.appointment.findFirst({ where: { id: appointmentId, organizationId: session.orgId }, include: { lead: true } });
   if (!appt) throw new ApiError(404, "Appointment not found");
-  if (appt.assignedToId !== session.userId && !can(session.role, "quotations:review"))
+  if (appt.assignedToId !== session.userId && !can(session, "quotations:review"))
     throw new ApiError(403, "Only the assigned salesperson can check in");
   if (appt.status === "CANCELLED") throw new ApiError(400, "Appointment is cancelled");
 
@@ -107,7 +107,7 @@ export async function checkIn(session: Session, appointmentId: string, capture: 
     leadId: appt.leadId,
     userId: session.userId,
     type: "CHECK_IN",
-    title: `Checked in for ${humanize(appt.type)} — ${humanize(result.verdict)}`,
+    title: `Checked in for ${humanize(appt.type)}: ${humanize(result.verdict)}`,
     body: result.checks.map((c) => `${c.passed ? "✓" : "✗"} ${c.label}: ${c.detail}`).join("\n"),
     meta: { verdict: result.verdict, distanceM: result.distanceM } as Prisma.InputJsonValue,
   });
@@ -118,7 +118,7 @@ export async function checkIn(session: Session, appointmentId: string, capture: 
 export async function checkOut(session: Session, appointmentId: string, outcome: string | null, itemsGiven: string[] = []) {
   const appt = await db.appointment.findFirst({ where: { id: appointmentId, organizationId: session.orgId } });
   if (!appt) throw new ApiError(404, "Appointment not found");
-  if (appt.assignedToId !== session.userId && !can(session.role, "quotations:review"))
+  if (appt.assignedToId !== session.userId && !can(session, "quotations:review"))
     throw new ApiError(403, "Only the assigned salesperson can complete this visit");
   const updated = await db.appointment.update({
     where: { id: appt.id },
@@ -250,7 +250,7 @@ function priceQuotation(
 }
 
 export async function createQuotation(session: Session, input: QuotationInput) {
-  if (input.mode === "OFFICE" && !can(session.role, "quotations:review"))
+  if (input.mode === "OFFICE" && !can(session, "quotations:review"))
     throw new ApiError(403, "Field sales must create quotations on-site with GPS. Office quotations need manager rights.");
 
   const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { name: true, settings: true } });
@@ -408,7 +408,7 @@ export async function reviseQuotation(session: Session, quotationId: string, inp
   const prior = await db.quotation.findFirst({ where: { id: quotationId, organizationId: session.orgId }, include: { lead: true } });
   if (!prior) throw new ApiError(404, "Quotation not found");
   const isOwner = prior.createdById === session.userId || prior.lead.assignedToId === session.userId;
-  if (!isOwner && !can(session.role, "quotations:review")) throw new ApiError(403, "Not your quotation");
+  if (!isOwner && !can(session, "quotations:review")) throw new ApiError(403, "Not your quotation");
 
   const rootId = prior.parentId ?? prior.id;
   const latest = await db.quotation.aggregate({ where: { organizationId: session.orgId, OR: [{ id: rootId }, { parentId: rootId }] }, _max: { version: true } });

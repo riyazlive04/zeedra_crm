@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import crypto from "node:crypto";
 import { runScheduledAutomations } from "@/lib/automation/engine";
+import { runNurture } from "@/lib/nurture/engine";
 import { syncAllMetaLeads } from "@/lib/services/meta-leads";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,8 @@ async function handler(req: NextRequest) {
   const started = Date.now();
   const summary = await runScheduledAutomations();
   const meta = await syncAllMetaLeads();
-  return NextResponse.json({ ok: true, ...summary, ...meta, ms: Date.now() - started });
+  const nurture = await runNurture();
+  return NextResponse.json({ ok: true, ...summary, ...meta, ...nurture, ms: Date.now() - started });
 }
 
 export { handler as GET, handler as POST };

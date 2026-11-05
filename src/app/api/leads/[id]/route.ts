@@ -42,9 +42,9 @@ export const PATCH = route<P>("leads:edit", async ({ req, session, params }) => 
     data.lat = lat ?? null;
     data.lng = lng ?? null;
     // Only managers can set a verified site pin; anyone else moving it makes it unverified.
-    data.sitePinned = can(session.role, "quotations:review") && lat != null && lng != null;
+    data.sitePinned = can(session, "quotations:review") && lat != null && lng != null;
   }
-  if (assignedToId !== undefined && can(session.role, "leads:assign")) data.assignedToId = assignedToId;
+  if (assignedToId !== undefined && can(session, "leads:assign")) data.assignedToId = assignedToId;
   await db.lead.update({ where: { id: lead.id }, data });
   if (Object.keys(input).some((k) => QUAL_FIELDS.has(k))) {
     await logActivity({ orgId: session.orgId, leadId: lead.id, userId: session.userId, type: "QUALIFICATION", title: "Qualification details updated" });

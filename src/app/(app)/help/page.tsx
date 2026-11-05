@@ -10,17 +10,18 @@ export const metadata = { title: "Help & guide" };
 export default async function HelpPage({ searchParams }: { searchParams: Promise<{ topic?: string }> }) {
   const session = await requirePageSession();
   const r = session.role;
+  const m = session.modules ?? [];
   const visible: Record<HelpPerm, boolean> = {
     always: true,
-    dashboard: r !== "INSTALLER",
-    leads: r !== "INSTALLER",
-    field: can(r, "quotations:create"),
-    quotations: can(r, "quotations:create"),
-    whatsapp: can(r, "whatsapp:send"),
-    tracking: can(r, "tracking:view"),
-    projects: can(r, "projects:manage"),
-    automations: can(r, "automations:manage"),
-    settings: can(r, "settings:manage"),
+    dashboard: m.includes("dashboard"),
+    leads: m.includes("leads"),
+    field: m.includes("field"),
+    quotations: m.includes("quotations"),
+    whatsapp: m.includes("whatsapp"),
+    tracking: m.includes("tracking"),
+    projects: m.includes("projects"),
+    automations: m.includes("automations"),
+    settings: m.includes("settings"),
   };
   const topics = HELP_TOPICS.filter((t) => visible[t.perm]);
   const sp = await searchParams;

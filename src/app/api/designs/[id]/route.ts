@@ -26,7 +26,7 @@ export const PATCH = route<P>("leads:edit", async ({ req, session, params }) => 
   await getDesign(session.orgId, params.id);
   const input = await parseBody(req, patchSchema);
   // Drone overlays are stored inline as downscaled JPEG data URLs; keep a design under ~6 MB.
-  if (input.data && JSON.stringify(input.data).length > 6_000_000) throw new ApiError(413, "Design is too large — use a smaller drone image");
+  if (input.data && JSON.stringify(input.data).length > 6_000_000) throw new ApiError(413, "This design is too large. Try a smaller drone image");
   const center = (input.data?.center ?? null) as { lat?: number; lng?: number } | null;
   const updated = await db.solarDesign.update({
     where: { id: params.id },

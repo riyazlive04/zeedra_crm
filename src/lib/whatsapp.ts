@@ -33,6 +33,12 @@ export async function sendWhatsApp(opts: {
   leadId?: string | null;
   userId?: string | null;
   automated?: boolean;
+  /** Up to 3 quick-reply buttons (interactive message — valid inside the 24h service window). */
+  buttons?: string[];
+  /** Nurture analytics tags. */
+  flowId?: string | null;
+  flowNodeId?: string | null;
+  broadcastId?: string | null;
 }): Promise<SendResult> {
   const org = await db.organization.findUniqueOrThrow({
     where: { id: opts.orgId },
@@ -56,6 +62,9 @@ export async function sendWhatsApp(opts: {
     }
   }
   if (!body.trim()) throw new Error("Message body is empty");
+  const buttons = (opts.buttons ?? []).map((b) => b.trim()).filter(Boolean).slice(0, 3);
+  // Stored/fallback text lists the options so they also work as a plain wa.me message.
+  const storedBody = buttons.length && !metaTemplate ? `${body}\n\n${buttons.map((b, i) => `${i + 1}. ${b}`).join("\n")}` : body;
 
   const msg = await db.whatsAppMessage.create({
     data: {
@@ -63,11 +72,14 @@ export async function sendWhatsApp(opts: {
       leadId: opts.leadId ?? null,
       phone: opts.phone,
       direction: "OUT",
-      body,
+      body: storedBody,
       templateKey: opts.templateKey ?? null,
       status: "QUEUED",
       automated: opts.automated ?? false,
       sentById: opts.userId ?? null,
+      flowId: opts.flowId ?? null,
+      flowNodeId: opts.flowNodeId ?? null,
+      broadcastId: opts.broadcastId ?? null,
     },
   });
 
@@ -89,7 +101,18 @@ export async function sendWhatsApp(opts: {
               : [],
           },
         }
-      : { messaging_product: "whatsapp", to: opts.phone, type: "text", text: { preview_url: true, body } };
+      : buttons.length
+        ? {
+            messaging_product: "whatsapp",
+            to: opts.phone,
+            type: "interactive",
+            interactive: {
+              type: "button",
+              body: { text: body.slice(0, 1024) },
+              action: { buttons: buttons.map((title, i) => ({ type: "reply", reply: { id: `b${i}`, title: title.slice(0, 20) } })) },
+            },
+          }
+        : { messaging_product: "whatsapp", to: opts.phone, type: "text", text: { preview_url: true, body } };
     try {
       const res = await fetch(`${GRAPH}/${org.waPhoneNumberId}/messages`, {
         method: "POST",
@@ -107,7 +130,7 @@ export async function sendWhatsApp(opts: {
       } else {
         status = "FAILED";
         error = json.error?.message ?? `HTTP ${res.status}`;
-        if (json.error?.code === 131047) error = "Outside 24-hour window — use an approved Meta template for this message.";
+        if (json.error?.code === 131047) error = "Outside the 24-hour window. Please use an approved Meta template for this message.";
       }
     } catch (e) {
       status = "FAILED";
@@ -124,10 +147,10 @@ export async function sendWhatsApp(opts: {
       userId: opts.userId,
       type: "WHATSAPP",
       title: `${opts.automated ? "Auto " : ""}WhatsApp ${status === "FAILED" ? "failed" : "sent"}${opts.templateKey ? ` · ${opts.templateKey}` : ""}`,
-      body: error ? `${body}\n\nError: ${error}` : body,
+      body: error ? `${storedBody}\n\nError: ${error}` : storedBody,
     });
   }
-  return { id: msg.id, status, error, waLink: waLink(opts.phone, body) };
+  return { id: msg.id, status, error, waLink: waLink(opts.phone, storedBody) };
 }
 
 /** Verifies Meta's X-Hub-Signature-256 header when WHATSAPP_APP_SECRET is configured. */

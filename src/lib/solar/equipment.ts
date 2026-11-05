@@ -173,7 +173,7 @@ export function checkString(s: StringDef, all: StringDef[], mod: ModuleModel, iv
   const n = s.panels.length;
   const issues: string[] = [];
   if (n > lim.maxBySafety) issues.push(`Voc at ${t.minC}°C = ${(n * lim.vocCold).toFixed(0)} V exceeds ${iv.maxDcV} V max DC input`);
-  else if (n > lim.maxByMppt) issues.push(`Above MPPT window when cold (${(n * lim.vmpCold).toFixed(0)} V > ${iv.mpptMaxV} V) — clipping`);
+  else if (n > lim.maxByMppt) issues.push(`Above MPPT window when cold (${(n * lim.vmpCold).toFixed(0)} V > ${iv.mpptMaxV} V), so it will clip`);
   if (n < lim.min) issues.push(`Vmp when hot = ${(n * lim.vmpHot).toFixed(0)} V, below ${Math.max(iv.mpptMinV, iv.startV)} V MPPT/start voltage`);
   const peers = all.filter((x) => x.inverterIndex === s.inverterIndex && x.mppt === s.mppt);
   if (peers.length > iv.stringsPerMppt) issues.push(`MPPT ${s.mppt + 1} accepts ${iv.stringsPerMppt} string(s), has ${peers.length}`);
@@ -212,7 +212,7 @@ export function autoString(orderedPanels: string[], mod: ModuleModel, inverters:
   let count = Math.max(1, Math.ceil(N / maxLen));
   if (count > slots.length) {
     count = slots.length;
-    warnings.push(`Inverters can take ${slots.length * maxLen} modules; ${N - slots.length * maxLen} left unstrung — add an inverter`);
+    warnings.push(`Inverters can take ${slots.length * maxLen} modules; ${N - slots.length * maxLen} left unstrung. Add an inverter`);
   }
   // Prefer equal lengths: if N splits unevenly, drop panels that don't fit rather than mix lengths on one MPPT.
   let len = Math.min(maxLen, Math.floor(N / count));
@@ -232,7 +232,7 @@ export function autoString(orderedPanels: string[], mod: ModuleModel, inverters:
     cursor += n;
   }
   const unstrung = orderedPanels.slice(cursor);
-  if (unstrung.length) warnings.push(`${unstrung.length} module(s) don't fit a valid string length — remove them or add an inverter`);
+  if (unstrung.length) warnings.push(`${unstrung.length} module(s) don't fit a valid string length. Remove them or add an inverter`);
   return { strings, unstrung, warnings };
 }
 

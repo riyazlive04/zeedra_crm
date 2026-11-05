@@ -27,8 +27,8 @@ export const POST = route("reports:view", async ({ session }) => {
     const lines = [
       `- ${compact.leadsToday} new leads today, ${compact.hotOpen} hot leads open, pipeline ${compact.pipelineValue}.`,
       compact.staleHotLeads.length ? `- ⚠ ${compact.staleHotLeads.length} hot leads not contacted in 2+ days: ${compact.staleHotLeads.slice(0, 3).map((l) => l.name).join(", ")}.` : "- ✅ Every hot lead was contacted in the last 2 days.",
-      compact.overdueFollowUps ? `- ${compact.overdueFollowUps} follow-ups are overdue — clear them before noon.` : "- No overdue follow-ups.",
-      compact.flaggedQuotations7d ? `- ${compact.flaggedQuotations7d} quotations failed GPS/time validation this week — review in Field Tracking.` : "- All field quotations this week passed location checks.",
+      compact.overdueFollowUps ? `- ${compact.overdueFollowUps} follow-ups are overdue. Clear them before noon.` : "- No overdue follow-ups.",
+      compact.flaggedQuotations7d ? `- ${compact.flaggedQuotations7d} quotations failed GPS/time checks this week. Review them in Field Tracking.` : "- All field quotations this week passed location checks.",
       `- ${compact.siteVisitsToday} site visits scheduled today; ${compact.wonThisMonth} deals won this month (${compact.wonValueThisMonth}).`,
     ];
     return { brief: lines.join("\n"), source: "rules" };

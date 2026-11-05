@@ -119,7 +119,7 @@ function ImportModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
         onClose();
       }}
       title="Import leads from CSV"
-      subtitle="Facebook Lead Ads, IndiaMART, JustDial, Excel exports — headers are matched automatically."
+      subtitle="Facebook Lead Ads, IndiaMART, JustDial, Excel exports. We match the headers automatically."
       footer={
         <>
           <Button onClick={onClose}>Close</Button>

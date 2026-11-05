@@ -39,7 +39,7 @@ export const GET = route(null, async ({ req, session }) => {
 
 export const POST = route("leads:edit", async ({ req, session }) => {
   const input = await parseBody(req, leadCreateSchema);
-  if (input.assignedToId && !can(session.role, "leads:assign")) input.assignedToId = session.userId;
+  if (input.assignedToId && !can(session, "leads:assign")) input.assignedToId = session.userId;
   if (!input.assignedToId && session.role === "FIELD_SALES") input.assignedToId = session.userId;
   const { lead, duplicate } = await createLead(session.orgId, input, session.userId);
   return Response.json({ lead, duplicate }, { status: duplicate ? 200 : 201 });

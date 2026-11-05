@@ -15,7 +15,7 @@ export default async function NewQuotationPage({ searchParams }: { searchParams:
     const settings = await orgSettings(session.orgId);
     return (
       <div>
-        <PageHeader title="New quotation" subtitle="Quoting a new customer — a lead is created for them automatically." />
+        <PageHeader title="New quotation" subtitle="Quoting a new customer? We'll create a lead for them automatically." />
         <QuoteBuilder lead={null} settings={settings} mode={m} appointment={null} />
       </div>
     );

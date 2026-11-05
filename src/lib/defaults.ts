@@ -3,7 +3,7 @@ import type { Action, Condition, Trigger } from "./automation/types";
 export const DEFAULT_TEMPLATES: { key: string; name: string; category: string; body: string }[] = [
   {
     key: "welcome",
-    name: "Welcome — new enquiry",
+    name: "Welcome: new enquiry",
     category: "UTILITY",
     body: "Namaste {{name}} 🙏 Thank you for your interest in rooftop solar with {{company}}!\n\nI'm {{salesperson}}, your solar advisor. To design the right system for your home, could you share a photo of your latest electricity (EB) bill? ☀️",
   },
@@ -29,13 +29,13 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; category: string; b
     key: "finance_options",
     name: "Solar loan / EMI offer",
     category: "MARKETING",
-    body: "Hi {{name}}, going solar doesn't need a big upfront payment 🏦\n\nWith collateral-free solar loans at ~7% p.a., your EMI can be about {{emi}}/month for {{loanTenure}} years — while you save ~{{savings}} every month on electricity.\n\nShall our loan desk help you with the documents?",
+    body: "Hi {{name}}, going solar doesn't need a big upfront payment 🏦\n\nWith collateral-free solar loans at ~7% p.a., your EMI can be about {{emi}}/month for {{loanTenure}} years, while you save ~{{savings}} every month on electricity.\n\nShall our loan desk help you with the documents?",
   },
   {
     key: "followup_nudge",
     name: "Follow-up nudge",
     category: "MARKETING",
-    body: "Hi {{name}}, checking in on your rooftop solar plan ☀️ The PM Surya Ghar subsidy of up to ₹78,000 is available right now. Any questions I can help with? — {{salesperson}}, {{company}}",
+    body: "Hi {{name}}, checking in on your rooftop solar plan ☀️ The PM Surya Ghar subsidy of up to ₹78,000 is available right now. Any questions I can help with?\n\n{{salesperson}}, {{company}}",
   },
   {
     key: "quotation_sent",
@@ -47,11 +47,11 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; category: string; b
     key: "quote_expiring",
     name: "Quotation expiring",
     category: "UTILITY",
-    body: "Hi {{name}}, your solar proposal {{quoteNumber}} is valid till {{validUntil}}. Confirm now to lock today's price and subsidy slot. Need any changes? — {{salesperson}}",
+    body: "Hi {{name}}, your solar proposal {{quoteNumber}} is valid till {{validUntil}}. Confirm now to lock today's price and subsidy slot. Need any changes?\n\n{{salesperson}}",
   },
   {
     key: "won_welcome",
-    name: "Booking confirmed — welcome",
+    name: "Booking confirmed: welcome",
     category: "UTILITY",
     body: "🎉 Welcome to the {{company}} solar family, {{name}}! Your {{kw}} kW project is confirmed.\n\nNext steps: PM Surya Ghar registration → DISCOM feasibility → installation → net-meter → subsidy. We'll update you at every step.",
   },
@@ -59,7 +59,7 @@ export const DEFAULT_TEMPLATES: { key: string; name: string; category: string; b
     key: "disqualified_nurture",
     name: "Not a fit right now",
     category: "MARKETING",
-    body: "Thank you {{name}} for your interest in solar. Based on the details shared, rooftop solar may not be the right fit right now. We'll keep you posted on new schemes that could work for you. 🙏 — {{company}}",
+    body: "Thank you {{name}} for your interest in solar. Based on the details shared, rooftop solar may not be the right fit right now. We'll keep you posted on new schemes that could work for you. 🙏\n\n{{company}}",
   },
 ];
 
@@ -96,7 +96,7 @@ export const DEFAULT_RULES: {
     conditions: [{ field: "temperature", op: "eq", value: "HOT" }],
     actions: [
       { type: "NOTIFY_MANAGERS", title: "🔥 Lead turned HOT" },
-      { type: "NOTIFY_ASSIGNEE", title: "🔥 Your lead is HOT — book the site visit" },
+      { type: "NOTIFY_ASSIGNEE", title: "🔥 Your lead is HOT! Book the site visit" },
       { type: "CREATE_TASK", title: "Book site visit (hot lead)", dueInHours: 4, priority: "HIGH" },
     ],
   },
@@ -154,7 +154,7 @@ export const DEFAULT_RULES: {
     conditions: [{ field: "temperature", op: "in", value: ["HOT", "WARM"] }],
     actions: [
       { type: "SEND_WHATSAPP", templateKey: "followup_nudge" },
-      { type: "CREATE_TASK", title: "Call — no contact for 3 days", dueInHours: 4, priority: "HIGH" },
+      { type: "CREATE_TASK", title: "Call: no contact for 3 days", dueInHours: 4, priority: "HIGH" },
     ],
     delayMinutes: 4320,
   },
@@ -165,7 +165,7 @@ export const DEFAULT_RULES: {
     conditions: [],
     actions: [
       { type: "SEND_WHATSAPP", templateKey: "quote_expiring" },
-      { type: "CREATE_TASK", title: "Quotation expiring — call to close", dueInHours: 8, priority: "HIGH" },
+      { type: "CREATE_TASK", title: "Quotation expiring, call to close", dueInHours: 8, priority: "HIGH" },
     ],
     delayMinutes: 2880,
   },
@@ -178,7 +178,7 @@ export const DEFAULT_RULES: {
   },
   {
     name: "Polite close for disqualified leads",
-    description: "Off by default — enable if you want to message disqualified enquiries.",
+    description: "Off by default. Turn it on if you want to message disqualified enquiries.",
     trigger: "LEAD_DISQUALIFIED",
     conditions: [],
     actions: [{ type: "SEND_WHATSAPP", templateKey: "disqualified_nurture" }],

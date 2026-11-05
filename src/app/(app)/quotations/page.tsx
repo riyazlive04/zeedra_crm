@@ -26,7 +26,7 @@ export default async function QuotationsPage({ searchParams }: { searchParams: P
   const session = await requirePageSession("quotations:create");
   const { f = "" } = await searchParams;
   const where: Prisma.QuotationWhereInput = { organizationId: session.orgId };
-  if (!can(session.role, "quotations:review")) where.createdById = session.userId;
+  if (!can(session, "quotations:review")) where.createdById = session.userId;
   const base = { ...where };
   if (f === "flagged") where.geoVerdict = { notIn: ["VERIFIED", "OFFICE_CREATED"] };
   else if (f) where.status = f as Prisma.QuotationWhereInput["status"];
@@ -54,7 +54,7 @@ export default async function QuotationsPage({ searchParams }: { searchParams: P
             <ButtonLink href={QUOTIFY_URL} target="_blank" rel="noopener noreferrer" size="sm">
               <ExternalLink className="h-4 w-4" /> Quotify
             </ButtonLink>
-            {can(session.role, "quotations:review") && (
+            {can(session, "quotations:review") && (
               <ButtonLink href="/quotations/new" variant="primary" size="sm">
                 <Plus className="h-4 w-4" /> New quotation
               </ButtonLink>

@@ -234,9 +234,9 @@ export function SolarCalculator({ settings }: { settings: OrgSettings }) {
         "",
         `System: ${r.actualKw} kW ${r.sysLabel} (${r.panels} panels)`,
         `Total: ${fmtINR(r.grandTotal)}${r.subsidy ? ` · Subsidy: ${fmtINR(r.subsidy)} · Net: ${fmtINR(r.netCost)}` : ""}`,
-        ebNow != null ? `EB bill today: ${fmtINR(ebNow)} every 2 months — for life` : "",
+        ebNow != null ? `EB bill today: ${fmtINR(ebNow)} every 2 months, for life` : "",
         `Saving: ${fmtINR(saving)} every 2 months`,
-        `EMI: ${fmtINR(emiBimonthly)} every 2 months for ${tenure / 12} years — then ₹0`,
+        `EMI: ${fmtINR(emiBimonthly)} every 2 months for ${tenure / 12} years, then ₹0`,
         `In ${YEARS} years you keep ~${fmtINR(kept)}`,
       ]
         .filter(Boolean)
@@ -311,7 +311,7 @@ export function SolarCalculator({ settings }: { settings: OrgSettings }) {
             <div className="grid gap-px bg-slate-100 sm:grid-cols-4">
               {[
                 ["TOTAL (Incl. GST)", fmtINR(r.grandTotal)],
-                ["Govt subsidy", r.subsidy ? `− ${fmtINR(r.subsidy)}` : "—"],
+                ["Govt subsidy", r.subsidy ? `− ${fmtINR(r.subsidy)}` : "-"],
                 ["Net cost", fmtINR(r.netCost)],
                 ["Payback", `${r.savings.paybackYrs.toFixed(1)} yrs`],
               ].map(([l, v]) => (
@@ -324,11 +324,11 @@ export function SolarCalculator({ settings }: { settings: OrgSettings }) {
           </Card>
 
           <Card>
-            <CardHeader title="EMI vs EB bill" subtitle="Every amount is per TNEB bill cycle — 2 months" />
+            <CardHeader title="EMI vs EB bill" subtitle="Every amount is per TNEB bill cycle (2 months)" />
             <div className="space-y-5 p-5">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Tile label="EB bill today" value={ebNow != null ? fmtINR(ebNow) : "—"} sub="Every 2 months, for life — and it rises ~6% a year" accent={EB} />
-                <Tile label="Solar EMI" value={fmtINR(emiBimonthly)} sub={`Every 2 months for ${tenure / 12} years — then ₹0`} accent={SOLAR} />
+                <Tile label="EB bill today" value={ebNow != null ? fmtINR(ebNow) : "-"} sub="Every 2 months, for life, and it rises ~6% a year" accent={EB} />
+                <Tile label="Solar EMI" value={fmtINR(emiBimonthly)} sub={`Every 2 months for ${tenure / 12} years, then ₹0`} accent={SOLAR} />
                 <Tile label="Bi-monthly saving" value={fmtINR(saving)} sub={ebNow != null ? `New bill ≈ ${fmtINR(left)} every 2 months` : "Off your TNEB bill"} />
                 <Tile label="After the EMI ends" value={`+${fmtINR(saving)}`} sub="Yours every 2 months, for 25+ years" />
               </div>

@@ -190,7 +190,7 @@ export function LeadWorkspace({ lead, settings, users, templates, activities, me
           <AiCopilot lead={lead} canSend={perms.whatsapp} />
 
           <Card>
-            <CardHeader title="Lead score" subtitle="Explainable — every point has a reason" action={<span className="font-display text-xl font-bold text-slate-900">{lead.score}</span>} />
+            <CardHeader title="Lead score" subtitle="Explainable: every point has a reason" action={<span className="font-display text-xl font-bold text-slate-900">{lead.score}</span>} />
             <div className="space-y-3 px-5 py-4">
               <ProgressBar value={lead.score} tone={lead.temperature === "HOT" ? "red" : lead.temperature === "WARM" ? "sun" : "green"} />
               <ul className="space-y-1.5">
@@ -372,7 +372,7 @@ function QualificationForm({ lead, settings, canEdit, onSaved }: { lead: Lead; s
           {needsFinance && (
             <div className="space-y-3 rounded-xl border border-sky-200 bg-sky-50/60 p-3 sm:col-span-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-sky-800">
-                <Landmark className="h-4 w-4" /> Finance can be managed — track the solar loan
+                <Landmark className="h-4 w-4" /> Finance can be managed. Track the solar loan
               </div>
               <Field label="Loan status">
                 <Segmented value={f.loanStatus} onChange={set("loanStatus")} options={LOAN_STATUSES.map((t) => ({ value: t, label: humanize(t) }))} />
@@ -386,7 +386,7 @@ function QualificationForm({ lead, settings, canEdit, onSaved }: { lead: Lead; s
           <Field label="Competitor quote">
             <NumberInput prefix="₹" value={f.competitorQuote} onChange={set("competitorQuote")} />
           </Field>
-          <Field label="If not ready — what's the problem?" className="sm:col-span-2">
+          <Field label="Not ready yet? What's holding them back?" className="sm:col-span-2">
             <Segmented value={f.objection} onChange={set("objection")} options={OBJECTIONS.map((t) => ({ value: t, label: t === "NONE" ? "No objection" : humanize(t) }))} />
           </Field>
           <Field label="Objection details" className="sm:col-span-2">
@@ -479,7 +479,7 @@ function ProposalTab({ lead, settings, quoteHref, canQuote }: { lead: Lead; sett
             </tbody>
           </table>
         </div>
-        <p className="px-5 py-3 text-xs text-slate-500">Positive cash-flow means the customer saves more on electricity than the EMI — the strongest closing argument.</p>
+        <p className="px-5 py-3 text-xs text-slate-500">Positive cash-flow means the customer saves more on electricity than the EMI. That's the strongest closing argument.</p>
       </Card>
     </div>
   );
@@ -635,7 +635,7 @@ function OwnerCard({ lead, users, canAssign }: { lead: Lead; users: { id: string
         <div>
           <dt className="text-slate-400">Next follow-up</dt>
           <dd suppressHydrationWarning className={clsx("font-medium", lead.nextFollowUpAt && new Date(lead.nextFollowUpAt) < new Date() ? "text-rose-600" : "text-slate-700")}>
-            {lead.nextFollowUpAt ? format(new Date(lead.nextFollowUpAt), "d MMM, h:mm a") : "—"}
+            {lead.nextFollowUpAt ? format(new Date(lead.nextFollowUpAt), "d MMM, h:mm a") : "-"}
           </dd>
         </div>
       </dl>
@@ -918,7 +918,7 @@ function StageModal({ lead, mode, onClose }: { lead: Lead; mode: null | "WON" | 
           <Field label="Why was it lost? *">
             <select className="input mb-2" value={reason} onChange={(e) => setReason(e.target.value)}>
               <option value="">Select a reason…</option>
-              {["Price too high / went with cheaper installer", "Loan not sanctioned", "Postponed — family decision", "Roof / structural issue", "Not the property owner", "Not reachable", "Chose a competitor brand"].map((r) => (
+              {["Price too high / went with cheaper installer", "Loan not sanctioned", "Postponed, family decision", "Roof / structural issue", "Not the property owner", "Not reachable", "Chose a competitor brand"].map((r) => (
                 <option key={r}>{r}</option>
               ))}
             </select>

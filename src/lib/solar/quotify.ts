@@ -407,7 +407,7 @@ function buildItems(actualKw: number, panels: number, pw: number, input: Quotify
   // User-added components (Settings → Common Components) apply to every system type.
   custom.components.forEach((c) => {
     if (!c.name || !(c.price > 0)) return;
-    push(c.name, "", "—", c.perKw ? actualKw : 1, c.perKw ? "KW" : "No", c.price);
+    push(c.name, "", "-", c.perKw ? actualKw : 1, c.perKw ? "KW" : "No", c.price);
   });
   return { items, inv };
 }

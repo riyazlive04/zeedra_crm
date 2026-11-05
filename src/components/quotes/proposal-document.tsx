@@ -196,7 +196,7 @@ export function ProposalDocument({ q, escalationPct = 3, degradationPct = 0.5 }:
               Net position after recovering the investment. Assumes {escalationPct}% yearly tariff rise and {degradationPct}% panel degradation.
             </p>
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
-              <Leaf className="h-4 w-4" /> Avoids {q.co2TonnesPerYear} tonnes of CO₂ every year — about {formatNumber(Math.round((q.co2TonnesPerYear * 1000) / 21))} trees.
+              <Leaf className="h-4 w-4" /> Avoids {q.co2TonnesPerYear} tonnes of CO₂ every year, about {formatNumber(Math.round((q.co2TonnesPerYear * 1000) / 21))} trees.
             </div>
           </div>
         </section>

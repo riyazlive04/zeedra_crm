@@ -26,11 +26,11 @@ export function templateVariables(body: string): string[] {
 }
 
 const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
-export const formatINR = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : inr.format(n));
+export const formatINR = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "-" : inr.format(n));
 
 /** ₹1.2 L / ₹3.4 Cr compact Indian notation for dashboards. */
 export function formatINRCompact(n: number | null | undefined): string {
-  if (n == null) return "—";
+  if (n == null) return "-";
   const abs = Math.abs(n);
   if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
   if (abs >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`;
@@ -39,10 +39,10 @@ export function formatINRCompact(n: number | null | undefined): string {
 }
 
 export const formatNumber = (n: number | null | undefined, digits = 0) =>
-  n == null ? "—" : n.toLocaleString("en-IN", { maximumFractionDigits: digits });
+  n == null ? "-" : n.toLocaleString("en-IN", { maximumFractionDigits: digits });
 
 export function humanize(v: string | null | undefined): string {
-  if (!v) return "—";
+  if (!v) return "-";
   return v
     .toLowerCase()
     .split("_")

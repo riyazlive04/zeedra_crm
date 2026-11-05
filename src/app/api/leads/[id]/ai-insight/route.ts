@@ -20,13 +20,13 @@ function ruleInsight(lead: Awaited<ReturnType<typeof getLeadForSession>>, s: Awa
   return {
     summary: sz
       ? `${lead.name} (${humanize(lead.segment)}) pays about ${formatINR(lead.monthlyBill ?? sz.monthlyUnits * s.tariffPerUnit)}/month. A ${sz.recommendedKw} kW system costs ${formatINR(sz.netCost)} after ${formatINR(sz.subsidy)} subsidy and saves ~${formatINR(sz.monthlySavings)}/month (payback ${sz.paybackYears} yrs).`
-      : `${lead.name} has not shared electricity bill details yet — sizing and pricing cannot be computed.`,
+      : `${lead.name} hasn't shared electricity bill details yet, so we can't work out sizing and pricing.`,
     temperatureRationale: `${score.temperature} at ${score.score}/100: ${score.breakdown.filter((b) => b.points !== 0).map((b) => `${b.label} (${b.points > 0 ? "+" : ""}${b.points})`).join(", ") || "not enough data"}.`,
     nextBestAction: score.nextActions[0] ?? "Call the customer and confirm the site-visit date.",
     objectionHandling:
       lead.objection && lead.objection !== "NONE"
         ? score.nextActions.find((a) => a.length > 60) ?? "Address the objection with numbers from the proposal."
-        : "No objection captured yet — ask: 'What would stop you from going solar this month?'",
+        : "No objection noted yet. Try asking: 'What would stop you from going solar this month?'",
     whatsappMessage: sz
       ? `Hi ${first}, for your ${formatINR(lead.monthlyBill ?? 0)} monthly bill a ${sz.recommendedKw} kW rooftop system fits well ☀️ Net cost after PM Surya Ghar subsidy is ${formatINR(sz.netCost)}, saving ~${formatINR(sz.monthlySavings)} every month.${loan ? ` EMI option from ${formatINR(loan.emi)}/month.` : ""} Can we do a free site survey this week?`
       : `Hi ${first}, thanks for your interest in rooftop solar ☀️ Could you share a photo of your latest electricity bill? I'll send you the exact system size, subsidy and savings.`,

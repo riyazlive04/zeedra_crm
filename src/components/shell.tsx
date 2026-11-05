@@ -6,42 +6,32 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarDays, Smartphone, FileText, MessageCircle, MapPinned, Hammer, Workflow,
-  Calculator, Settings, Bell, Sun, Gauge, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
+  Calculator, Settings, Bell, Sun, Gauge, GitFork, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
 } from "lucide-react";
 import { Avatar } from "./ui";
 import { api } from "@/lib/client";
 import { BRAND } from "@/lib/brand";
 import { formatDistanceToNow } from "date-fns";
 
-export interface NavPerms {
-  dashboard: boolean;
-  leads: boolean;
-  field: boolean;
-  quotations: boolean;
-  whatsapp: boolean;
-  tracking: boolean;
-  projects: boolean;
-  automations: boolean;
-  settings: boolean;
-  createLead: boolean;
-  help: boolean;
-}
+/** Module keys (src/lib/modules.ts) the user can open, plus a few UI flags. */
+export type NavPerms = Record<string, boolean> & { createLead: boolean; help: boolean };
 
-const NAV: { href: string; label: string; icon: typeof Users; perm: keyof NavPerms; section?: string }[] = [
+const NAV: { href: string; label: string; icon: typeof Users; perm: string; section?: string }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: "dashboard" },
   { href: "/leads", label: "Leads", icon: Users, perm: "leads", section: "Sales" },
-  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare, perm: "leads" },
-  { href: "/appointments", label: "Appointments", icon: CalendarDays, perm: "leads" },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare, perm: "leads" },
+  { href: "/pipeline", label: "Pipeline", icon: KanbanSquare, perm: "pipeline" },
+  { href: "/appointments", label: "Appointments", icon: CalendarDays, perm: "appointments" },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare, perm: "tasks" },
   { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp" },
+  { href: "/nurture", label: "WhatsApp Nurture", icon: GitFork, perm: "nurture" },
   { href: "/field", label: "Field App", icon: Smartphone, perm: "field", section: "Field" },
   { href: "/quotations", label: "Quotations", icon: FileText, perm: "quotations" },
-  { href: "/designs", label: "Roof Design", icon: Sun, perm: "leads" },
+  { href: "/designs", label: "Roof Design", icon: Sun, perm: "designs" },
   { href: "/tracking", label: "Field Tracking", icon: MapPinned, perm: "tracking" },
   { href: "/projects", label: "Installations", icon: Hammer, perm: "projects", section: "Delivery" },
-  { href: "/pm-dashboard", label: "PM Dashboard", icon: Gauge, perm: "projects" },
+  { href: "/pm-dashboard", label: "PM Dashboard", icon: Gauge, perm: "pm" },
   { href: "/automations", label: "Automations", icon: Workflow, perm: "automations", section: "Workspace" },
-  { href: "/calculator", label: "Solar Calculator", icon: Calculator, perm: "leads" },
+  { href: "/calculator", label: "Solar Calculator", icon: Calculator, perm: "calculator" },
   { href: "/settings", label: "Settings", icon: Settings, perm: "settings" },
   { href: "/help", label: "Help & guide", icon: BookOpen, perm: "help", section: "Support" },
 ];

@@ -267,10 +267,10 @@ export function PanelLayoutEditor({
       <p className="mt-2 text-center text-[11px] text-slate-500">
         {panelCount} panel{panelCount === 1 ? "" : "s"} × {state.watt} Wp = {systemKw} kWp · array ≈ {footW.toFixed(1)} m × {footD.toFixed(1)} m ({Math.round(footSqft)} sq.ft)
         {roofAreaSqft ? (
-          <span className={footSqft > roofAreaSqft ? " font-medium text-rose-600" : ""}> · roof {Math.round(roofAreaSqft)} sq.ft{footSqft > roofAreaSqft ? " — doesn't fit" : ""}</span>
+          <span className={footSqft > roofAreaSqft ? " font-medium text-rose-600" : ""}> · roof {Math.round(roofAreaSqft)} sq.ft{footSqft > roofAreaSqft ? " · doesn't fit" : ""}</span>
         ) : null}
       </p>
-      <p className="text-center text-[11px] text-slate-400">Drag panels to rearrange (tap a panel, then a slot, on phones). Illustrative — use Roof design for a measured layout and shading.</p>
+      <p className="text-center text-[11px] text-slate-400">Drag panels to rearrange (tap a panel, then a slot, on phones). This is a rough guide. Use Roof design for a measured layout and shading.</p>
     </div>
   );
 }

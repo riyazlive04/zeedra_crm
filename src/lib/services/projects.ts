@@ -16,7 +16,7 @@ async function assignStageTask(orgId: string, projectId: string, projectCode: st
   const org = await db.organization.findUniqueOrThrow({ where: { id: orgId }, select: { settings: true } });
   const step = parseSettings(org.settings).projectWorkflow.find((w) => w.stage === stage);
   if (!step?.primaryUserId) return;
-  const title = `${step.taskTitle.trim() || stageLabel} — ${leadName} (${projectCode})`;
+  const title = `${step.taskTitle.trim() || stageLabel} · ${leadName} (${projectCode})`;
   await db.task.create({
     data: {
       organizationId: orgId,

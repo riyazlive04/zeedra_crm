@@ -1,5 +1,6 @@
 "use client";
 
+import { ConnectWhatsAppBanner } from "@/components/nurture/nurture-home";
 import { TimeAgo } from "../time-ago";
 import { useState } from "react";
 import Link from "next/link";
@@ -33,7 +34,7 @@ export function Inbox({ conversations, templates, initialLead, connected }: { co
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input className="input pl-9" placeholder="Search conversations" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          {!connected && <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">Cloud API not connected — messages are logged and opened via wa.me. Connect in Settings → Integrations.</p>}
+          {!connected && <div className="mt-2"><ConnectWhatsAppBanner compact /></div>}
         </div>
         <ul className="flex-1 overflow-y-auto">
           {list.length === 0 && <EmptyState icon={<MessageCircle className="h-5 w-5" />} title="No conversations" />}

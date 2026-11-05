@@ -19,7 +19,7 @@ export function QuoteActions({ id, status, shareToken, canAccept, canRevise, pri
     try {
       const r = await api<{ whatsapp?: { status: string; waLink: string } | null }>(`/api/quotations/${id}`, { body: { action, ...body } });
       if (r?.whatsapp?.status === "SIMULATED") window.open(r.whatsapp.waLink, "_blank");
-      toast.success(action === "send" ? "Proposal shared with customer" : action === "accept" ? "🎉 Accepted — deal won & project opened" : "Quotation updated");
+      toast.success(action === "send" ? "Proposal shared with customer" : action === "accept" ? "🎉 Accepted! Deal won and project opened" : "Quotation updated");
       router.refresh();
     } catch (e) {
       toast.error("Action failed", e instanceof Error ? e.message : undefined);
@@ -99,7 +99,7 @@ function ReviseQuotation({ id, priceOnly }: { id: string; priceOnly: boolean }) 
         open={open}
         onClose={() => setOpen(false)}
         title="Revise quotation"
-        subtitle={priceOnly ? "The system stays the same — adjust the final quote price. The current version is kept as-is." : "System size stays the same — change the discount, set a final negotiated price, or update notes. The current version is kept as-is."}
+        subtitle={priceOnly ? "The system stays the same. Just adjust the final quote price. The current version is kept as-is." : "System size stays the same. Change the discount, set a final negotiated price, or update notes. The current version is kept as-is."}
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancel</Button>
@@ -115,7 +115,7 @@ function ReviseQuotation({ id, priceOnly }: { id: string; priceOnly: boolean }) 
               <NumberInput prefix="₹" value={discount} onChange={setDiscount} placeholder="Unchanged" />
             </Field>
           )}
-          <Field label={priceOnly ? "Adjust Final Quote Price" : "Set a final price"} hint="Overrides the computed total — GST is backed out automatically">
+          <Field label={priceOnly ? "Adjust Final Quote Price" : "Set a final price"} hint="Replaces the calculated total. GST is worked out from it automatically">
             <NumberInput prefix="₹" value={finalPrice} onChange={setFinalPrice} placeholder="Unchanged" />
           </Field>
           {!priceOnly && (

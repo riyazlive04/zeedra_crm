@@ -10,8 +10,8 @@ export const metadata = { title: "Tasks" };
 export default async function TasksPage({ searchParams }: { searchParams: Promise<{ team?: string }> }) {
   const session = await requirePageSession();
   const { team } = await searchParams;
-  const showTeam = team === "1" && can(session.role, "leads:assign");
-  const canAssign = can(session.role, "leads:assign");
+  const showTeam = team === "1" && can(session, "leads:assign");
+  const canAssign = can(session, "leads:assign");
   const teamMembers = canAssign
     ? await db.user.findMany({ where: { organizationId: session.orgId, active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })
     : undefined;
@@ -29,9 +29,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title={showTeam ? "Team tasks" : "My tasks"}
-        subtitle={canAssign ? "Follow-ups for you and your team — pick who does it when you add a task." : "Follow-ups created by you and by automations."}
+        subtitle={canAssign ? "Follow-ups for you and your team. Pick who does it when you add a task." : "Follow-ups created by you and by automations."}
         actions={
-          can(session.role, "leads:assign") && (
+          can(session, "leads:assign") && (
             <Link href={showTeam ? "/tasks" : "/tasks?team=1"} className="text-sm font-medium text-sun-700 hover:underline">
               {showTeam ? "Show only mine" : "Show whole team"}
             </Link>

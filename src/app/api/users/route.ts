@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/errors";
 import { audit } from "@/lib/activity";
 import { normalizePhone } from "@/lib/text";
 import { seatLimitReached } from "@/lib/billing/plans";
+import { MODULE_KEYS } from "@/lib/modules";
 
 const COLORS = ["#22c55e", "#3b82f6", "#f97316", "#ec4899", "#14b8a6", "#a855f7", "#eab308", "#ef4444", "#6366f1"];
 
@@ -14,7 +15,7 @@ export const GET = route(null, async ({ session }) =>
   db.user.findMany({
     where: { organizationId: session.orgId },
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true },
+    select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true, modules: true },
   }),
 );
 
@@ -25,6 +26,8 @@ const createSchema = z.object({
   role: z.enum(ROLES).refine((r) => r !== "OWNER", "Only one owner per organisation"),
   territory: z.string().trim().max(80).optional(),
   password: z.string().min(8).max(200),
+  /** null / omitted = the role's default modules. */
+  modules: z.array(z.enum(MODULE_KEYS as [string, ...string[]])).nullable().optional(),
 });
 
 export const POST = route("users:manage", async ({ req, session }) => {
@@ -41,6 +44,7 @@ export const POST = route("users:manage", async ({ req, session }) => {
       phone: body.phone ? normalizePhone(body.phone) : null,
       role: body.role,
       territory: body.territory || null,
+      modules: body.modules ?? undefined,
       passwordHash: await hashPassword(body.password),
       avatarColor: COLORS[count % COLORS.length],
     },

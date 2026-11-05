@@ -41,7 +41,7 @@ export function leadListWhere(q: URLSearchParams, session: Session): Prisma.Lead
   const segment = q.get("segment");
   if (segment && (SEGMENTS as readonly string[]).includes(segment)) where.segment = segment as "RESIDENTIAL";
   const assigned = q.get("assignedToId");
-  if (assigned && can(session.role, "leads:view_all")) where.assignedToId = assigned === "none" ? null : assigned;
+  if (assigned && can(session, "leads:view_all")) where.assignedToId = assigned === "none" ? null : assigned;
   if (q.get("open") === "1") and.push({ stage: { notIn: ["WON", "LOST", "DISQUALIFIED"] } });
   if (q.get("followUpDue") === "1") and.push({ nextFollowUpAt: { lte: new Date() }, stage: { notIn: ["WON", "LOST", "DISQUALIFIED"] } });
   const search = q.get("q")?.trim();

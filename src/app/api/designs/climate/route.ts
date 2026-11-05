@@ -19,7 +19,7 @@ export const GET = route(null, async ({ req }) => {
     `https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN,CLRSKY_SFC_SW_DWN,T2M_MIN,T2M_MAX` +
     `&community=RE&longitude=${lng.toFixed(3)}&latitude=${lat.toFixed(3)}&format=JSON`;
   const res = await fetch(url, { signal: AbortSignal.timeout(12000) }).catch(() => null);
-  if (!res?.ok) throw new ApiError(502, "Weather data unavailable — using a default clearness of 0.75");
+  if (!res?.ok) throw new ApiError(502, "Weather data isn't available right now, so we're using a default clearness of 0.75");
   const json = (await res.json()) as { properties?: { parameter?: Record<string, Record<string, number>> } };
   const p = json.properties?.parameter;
   if (!p?.ALLSKY_SFC_SW_DWN || !p?.CLRSKY_SFC_SW_DWN) throw new ApiError(502, "Weather data incomplete");

@@ -25,7 +25,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       include: { lead: { select: { id: true, name: true } } },
     }),
   ]);
-  const manager = can(session.role, "reports:view");
+  const manager = can(session, "reports:view");
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
@@ -120,7 +120,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         <td className="px-3 py-2.5 text-right tabular-nums">{t.quotes}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums">
                           {t.verifiedPct == null ? (
-                            <span className="text-slate-300">—</span>
+                            <span className="text-slate-300">-</span>
                           ) : (
                             <span className={t.verifiedPct >= 90 ? "text-emerald-700" : t.verifiedPct >= 70 ? "text-amber-700" : "text-rose-700"}>
                               {t.verifiedPct}% {t.verifiedPct < 70 && "⚠"}
@@ -170,7 +170,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium text-slate-800">{a.lead.name}</div>
                         <div className="truncate text-xs text-slate-500">
-                          {humanize(a.type)} · {a.lead.city ?? "—"}
+                          {humanize(a.type)} · {a.lead.city ?? "-"}
                         </div>
                       </div>
                       <Avatar name={a.assignedTo.name} color={a.assignedTo.avatarColor} size={24} />
@@ -184,7 +184,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <Card>
             <CardHeader title="Hot leads going cold" subtitle="No contact in 2+ days" icon={<Zap className="h-4 w-4" />} />
             {s.staleHot.length === 0 ? (
-              <EmptyState title="Great — every hot lead is warm ☀️" />
+              <EmptyState title="Great, every hot lead is warm ☀️" />
             ) : (
               <ul className="divide-y divide-slate-100">
                 {s.staleHot.map((l) => (

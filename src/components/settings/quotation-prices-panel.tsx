@@ -237,7 +237,7 @@ export function QuotationPricesPanel({ settings }: { settings: OrgSettings }) {
     setComps([]);
     setDefaultPanelType("bifacial");
     setResetKey((k) => k + 1);
-    toast.info("Reset to Defaults — press Save to apply.");
+    toast.info("Reset to defaults. Press Save to apply.");
   }
 
   return (

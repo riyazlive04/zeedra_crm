@@ -19,8 +19,8 @@ export default async function NewLeadPage() {
   ]);
   return (
     <div>
-      <PageHeader title="New lead" subtitle="Capture the enquiry — qualification, sizing and the WhatsApp welcome happen automatically." />
-      <NewLeadForm settings={settings} users={users} canAssign={can(session.role, "leads:assign")} />
+      <PageHeader title="New lead" subtitle="Add the enquiry. We'll handle qualification, sizing and the WhatsApp welcome for you." />
+      <NewLeadForm settings={settings} users={users} canAssign={can(session, "leads:assign")} />
     </div>
   );
 }

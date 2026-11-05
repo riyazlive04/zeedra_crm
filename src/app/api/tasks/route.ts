@@ -8,7 +8,7 @@ import { format } from "date-fns";
 
 export const GET = route(null, async ({ req, session }) => {
   const q = searchParams(req);
-  const mine = q.get("mine") !== "0" || !can(session.role, "leads:view_all");
+  const mine = q.get("mine") !== "0" || !can(session, "leads:view_all");
   return db.task.findMany({
     where: { organizationId: session.orgId, done: q.get("done") === "1", ...(mine ? { assignedToId: session.userId } : {}) },
     orderBy: [{ dueAt: "asc" }],
@@ -28,7 +28,7 @@ const createSchema = z.object({
 export const POST = route(null, async ({ req, session }) => {
   const body = await parseBody(req, createSchema);
   if (body.leadId && !(await db.lead.count({ where: { id: body.leadId, organizationId: session.orgId } }))) throw new ApiError(400, "Lead not found");
-  const assignee = can(session.role, "leads:assign") ? (body.assignedToId ?? session.userId) : session.userId;
+  const assignee = can(session, "leads:assign") ? (body.assignedToId ?? session.userId) : session.userId;
   if (assignee !== session.userId && !(await db.user.count({ where: { id: assignee, organizationId: session.orgId, active: true } })))
     throw new ApiError(400, "Pick an active team member");
   const task = await db.task.create({ data: { ...body, assignedToId: assignee, organizationId: session.orgId } });
@@ -45,6 +45,6 @@ export const PATCH = route(null, async ({ req, session }) => {
   const body = await parseBody(req, patchSchema);
   const t = await db.task.findFirst({ where: { id: body.id, organizationId: session.orgId } });
   if (!t) throw new ApiError(404, "Task not found");
-  if (t.assignedToId !== session.userId && !can(session.role, "leads:assign")) throw new ApiError(403, "Not your task");
+  if (t.assignedToId !== session.userId && !can(session, "leads:assign")) throw new ApiError(403, "Not your task");
   return db.task.update({ where: { id: t.id }, data: { done: body.done, doneAt: body.done ? new Date() : null } });
 });

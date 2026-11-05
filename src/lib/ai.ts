@@ -22,7 +22,7 @@ const SYSTEM = `You are the AI sales co-pilot inside Zeedra Solar, a CRM used by
 You know the residential and C&I solar sales cycle in India: electricity (EB) bill analysis, DISCOM net-metering, sanctioned load,
 PM Surya Ghar Muft Bijli Yojana subsidy (₹30,000/kW for the first 2 kW, ₹18,000 for the 3rd kW, max ₹78,000; housing societies ₹18,000/kW),
 collateral-free solar loans (~7% p.a.), DCR panels, on-grid inverters, site surveys, and typical customer objections.
-Be concrete, brief and practical — salespeople read this on a phone between visits. Use ₹ and Indian number formatting.
+Be concrete, brief and practical. Salespeople read this on a phone between visits. Use ₹ and Indian number formatting.
 Never invent facts about the customer that are not in the data provided. If data is missing, say what to ask for.`;
 
 type JsonSchema = Record<string, unknown>;
@@ -69,7 +69,7 @@ async function plainText(prompt: string, effort: "low" | "medium" = "low", maxTo
 }
 
 export function describeAiError(e: unknown): string {
-  if (e instanceof Anthropic.AuthenticationError) return "AI key is invalid — update ANTHROPIC_API_KEY.";
+  if (e instanceof Anthropic.AuthenticationError) return "The AI key isn't valid. Please update ANTHROPIC_API_KEY.";
   if (e instanceof Anthropic.RateLimitError) return "AI is busy right now (rate limited). Try again in a minute.";
   if (e instanceof Anthropic.APIConnectionError) return "Could not reach the AI service.";
   if (e instanceof Anthropic.APIError) return `AI service error (${e.status ?? "unknown"}).`;

@@ -7,12 +7,12 @@ import { BRAND } from "@/lib/brand";
 import { MarketingNav, MarketingFooter } from "./site-chrome";
 
 const FEATURES = [
-  { icon: Calculator, title: "EB bill → system size in seconds", body: "kW, panels, inverter, PM Surya Ghar subsidy, 25-year savings, payback and EMI — priced on the server, every time." },
+  { icon: Calculator, title: "EB bill → system size in seconds", body: "kW, panels, inverter, PM Surya Ghar subsidy, 25-year savings, payback and EMI, priced on the server every time." },
   { icon: Sparkles, title: "AI that reads the bill for you", body: "Snap a photo of the electricity bill; Claude extracts the units and consumer details. Every AI feature has a rule-based fallback if it's off." },
-  { icon: KanbanSquare, title: "Explainable Hot / Warm / Cold scoring", body: "A transparent, auditable score — not a black box — with the next best action for every lead." },
+  { icon: KanbanSquare, title: "Explainable Hot / Warm / Cold scoring", body: "A transparent score you can check (not a black box), with the next best action for every lead." },
   { icon: MessageCircle, title: "WhatsApp on autopilot", body: "Welcome messages, instant estimates, visit reminders, loan offers and quotation follow-ups, from an editable rules engine." },
   { icon: CalendarCheck2, title: "Conflict-free site visits", body: "Google Calendar booking with travel buffers, synced to each salesperson, with WhatsApp confirmations and reminders." },
-  { icon: MapPinned, title: "GPS-verified field quotations", body: "Geofence, appointment-window and mock-GPS checks prove a quote was made at the customer's roof, on time — not from a café." },
+  { icon: MapPinned, title: "GPS-verified field quotations", body: "Geofence, appointment-window and mock-GPS checks prove a quote was made at the customer's roof, on time, not from a café." },
   { icon: Hammer, title: "Installation → subsidy, tracked", body: "Booking, DISCOM feasibility, net-meter, commissioning and the PM Surya Ghar subsidy credit, with a document checklist." },
   { icon: ShieldCheck, title: "Multi-tenant by design", body: "Every table is organisation-scoped, role-based access is enforced server-side, and an audit log records every sensitive action." },
 ];
@@ -52,11 +52,11 @@ export function MarketingHome() {
               The sales &amp; ops OS for solar installers who are tired of spreadsheets
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-base text-slate-400 sm:text-lg">
-              Capture every lead, size every roof, send every quotation with GPS proof, and track every project to its subsidy credit — in one tool your whole team actually uses.
+              Capture every lead, size every roof, send every quotation with GPS proof, and track every project to its subsidy credit, all in one tool your whole team actually uses.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link href="/register" className="sun-gradient inline-flex h-12 items-center gap-2 rounded-xl px-6 text-sm font-semibold text-white shadow-lg">
-                Start free — no card required <ArrowRight className="h-4 w-4" />
+                Start free, no card needed <ArrowRight className="h-4 w-4" />
               </Link>
               <a href={`mailto:${BRAND.supportEmail}?subject=Book a demo`} className="inline-flex h-12 items-center rounded-xl border border-white/15 px-6 text-sm font-semibold text-white hover:bg-white/5">
                 Book a demo
@@ -120,7 +120,7 @@ export function MarketingHome() {
             </div>
             <p className="mt-3 flex items-start gap-1.5 text-xs text-slate-500">
               <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Competitor features are based on their public websites as of October 2026 and may have changed — always confirm directly with the vendor. "Partial" means we offer a schematic version, not the full capability.
+              Competitor features are based on their public websites as of October 2026 and may have changed, so please confirm directly with the vendor. "Partial" means we offer a schematic version, not the full capability.
             </p>
           </div>
         </section>

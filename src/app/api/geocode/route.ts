@@ -12,7 +12,7 @@ export const GET = route(null, async ({ req, session }) => {
     headers: { "User-Agent": `SirahZeedraSolar-CRM/1.0 (${process.env.APP_URL ?? "localhost"})`, "Accept-Language": "en" },
     signal: AbortSignal.timeout(8000),
   }).catch(() => null);
-  if (!res?.ok) throw new ApiError(502, "Address lookup is unavailable right now — drop the pin on the map instead");
+  if (!res?.ok) throw new ApiError(502, "Address lookup isn't working right now. Please drop the pin on the map instead");
   const rows = (await res.json()) as { lat: string; lon: string; display_name: string }[];
   return rows.map((r) => ({ lat: Number(r.lat), lng: Number(r.lon), label: r.display_name }));
 });

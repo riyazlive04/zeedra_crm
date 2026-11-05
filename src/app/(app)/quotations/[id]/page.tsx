@@ -34,7 +34,7 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
     orgSettings(session.orgId),
   ]);
   if (!q) notFound();
-  const reviewer = can(session.role, "quotations:review");
+  const reviewer = can(session, "quotations:review");
   const isOwner = q.createdById === session.userId || q.lead.assignedToId === session.userId;
   if (!reviewer && !isOwner) notFound();
   const geo = (q.geoFlags as { checks?: { key: string; label: string; passed: boolean; detail: string }[] } | null)?.checks ?? [];
@@ -76,7 +76,7 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
               <FileSignature className="h-4 w-4" /> Agreement
             </ButtonLink>
           )}
-          <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} priceOnly={isQuotifySnapshot(q.quoteData)} />
+          <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} priceOnly={isQuotifySnapshot(q.quoteData)} />
         </div>
       </div>
       {!isLatest && (

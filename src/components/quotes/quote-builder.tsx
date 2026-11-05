@@ -366,8 +366,8 @@ export function QuoteBuilder({
       });
       setResult({ id: r.quotation.id, number: r.quotation.number, verdict: r.quotation.geoVerdict, checks: r.validation?.checks ?? [], leadId: r.lead.id, leadName: r.lead.name });
       if (r.quotation.geoVerdict === "VERIFIED" || r.quotation.geoVerdict === "OFFICE_CREATED") {
-        toast.success(`Quotation ${r.quotation.number} created`, r.leadDuplicate ? `Matched an existing customer — ${r.lead.name} (${r.lead.code}).` : r.leadCreated ? `New lead ${r.lead.code} created for ${r.lead.name}.` : undefined);
-      } else toast.info(`Quotation ${r.quotation.number} created — flagged for review`, VERDICT_META[r.quotation.geoVerdict]?.help);
+        toast.success(`Quotation ${r.quotation.number} created`, r.leadDuplicate ? `Matched an existing customer: ${r.lead.name} (${r.lead.code}).` : r.leadCreated ? `New lead ${r.lead.code} created for ${r.lead.name}.` : undefined);
+      } else toast.info(`Quotation ${r.quotation.number} created and flagged for review`, VERDICT_META[r.quotation.geoVerdict]?.help);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       toast.error("Could not create quotation", e instanceof Error ? e.message : undefined);
@@ -450,14 +450,14 @@ export function QuoteBuilder({
             />
             <div className="space-y-3 p-5">
               {gpsError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{gpsError}</p>}
-              {!site && <p className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-800">This customer&apos;s site is not pinned yet. The quotation will be flagged &quot;Site not pinned&quot; for manager review — that is expected for first visits.</p>}
+              {!site && <p className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-800">This customer&apos;s site is not pinned yet. The quotation will be flagged &quot;Site not pinned&quot; for manager review. That's expected on a first visit.</p>}
               {fix && (
                 <div className={clsx("flex flex-wrap items-center gap-3 rounded-xl px-4 py-3", previewOk ? "bg-emerald-50" : site ? "bg-amber-50" : "bg-slate-50")}>
                   <MapPin className={clsx("h-5 w-5", previewOk ? "text-emerald-600" : "text-amber-600")} />
                   <div className="text-sm">
                     <div className="font-semibold text-slate-800">{previewDistance != null ? `${formatDistance(previewDistance)} from site` : "Location captured"}</div>
                     <div className="text-xs text-slate-500">
-                      GPS accuracy ±{fix.accuracyM} m {fix.accuracyM > settings.maxGpsAccuracyM && "— too weak, step outside and re-check"}
+                      GPS accuracy ±{fix.accuracyM} m {fix.accuracyM > settings.maxGpsAccuracyM && "· too weak, step outside and check again"}
                     </div>
                   </div>
                   <Badge tone={previewOk ? "green" : "amber"} className="ml-auto">
@@ -480,7 +480,7 @@ export function QuoteBuilder({
           </Card>
         ) : (
           <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-card">
-            <Building2 className="h-5 w-5 text-slate-400" /> Office quotation — recorded as created by a manager without site validation.
+            <Building2 className="h-5 w-5 text-slate-400" /> Office quotation. It's recorded as created by a manager, without a site check.
           </div>
         )}
 

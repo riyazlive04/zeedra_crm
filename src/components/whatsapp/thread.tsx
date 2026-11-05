@@ -99,7 +99,7 @@ export function WhatsAppThread({
         className="flex-1 space-y-2 overflow-y-auto px-3 py-4"
         style={{ backgroundColor: "#efeae2", backgroundImage: "radial-gradient(rgba(0,0,0,0.035) 1px, transparent 1px)", backgroundSize: "14px 14px" }}
       >
-        {messages.length === 0 && <div className="mx-auto mt-10 w-fit rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-500">No messages yet — start the conversation.</div>}
+        {messages.length === 0 && <div className="mx-auto mt-10 w-fit rounded-lg bg-white/80 px-3 py-2 text-xs text-slate-500">No messages yet. Say hello to start the conversation.</div>}
         {messages.map((m, i) => {
           const d = new Date(m.createdAt);
           const prev = messages[i - 1];

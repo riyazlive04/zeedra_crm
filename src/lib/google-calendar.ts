@@ -80,7 +80,7 @@ async function accessToken(refreshToken: string): Promise<string> {
     }),
   });
   const json = (await res.json()) as { access_token?: string; error?: string };
-  if (!res.ok || !json.access_token) throw new Error(json.error === "invalid_grant" ? "Google access revoked — reconnect calendar" : "Google auth failed");
+  if (!res.ok || !json.access_token) throw new Error(json.error === "invalid_grant" ? "Google access was revoked. Please reconnect your calendar" : "Google auth failed");
   return json.access_token;
 }
 

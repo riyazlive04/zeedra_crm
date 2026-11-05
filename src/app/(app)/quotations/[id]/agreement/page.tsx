@@ -35,7 +35,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
         stamp: cfg.stamp,
       }}
       notReady={agreementNotReady(cfg)}
-      canEditSettings={can(session.role, "settings:manage")}
+      canEditSettings={can(session, "settings:manage")}
     />
   );
 }

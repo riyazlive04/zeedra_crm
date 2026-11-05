@@ -66,7 +66,7 @@ export function BookAppointmentModal({
     setSaving(true);
     try {
       await api("/api/appointments", { body: { leadId: lead.id, assignedToId: userId, type, startAt: picked, durationMinutes: duration, notes: notes || null, address: lead.address ?? null } });
-      toast.success(`${humanize(type)} booked`, `${format(new Date(picked), "EEE d MMM, h:mm a")} — confirmation sent on WhatsApp${google ? " & added to Google Calendar" : ""}.`);
+      toast.success(`${humanize(type)} booked`, `${format(new Date(picked), "EEE d MMM, h:mm a")}. Confirmation sent on WhatsApp${google ? " & added to Google Calendar" : ""}.`);
       onClose();
       router.refresh();
     } catch (e) {

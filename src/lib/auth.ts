@@ -1,4 +1,5 @@
 import "server-only";
+import { effectiveModules, effectivePermissions, homeFor } from "./modules";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -47,7 +48,7 @@ export async function clearSessionCookie() {
 export const getActiveUser = cache((userId: string) =>
   db.user.findUnique({
     where: { id: userId },
-    select: { active: true, role: true, name: true, email: true, avatarColor: true, organizationId: true },
+    select: { active: true, role: true, name: true, email: true, avatarColor: true, organizationId: true, modules: true },
   }),
 );
 
@@ -58,8 +59,9 @@ export async function requirePageSession(permission?: Permission): Promise<Sessi
   const user = await getActiveUser(s.userId);
   if (!user?.active) redirect("/login?error=inactive");
   // Role and name come from the DB so profile edits and role changes apply without re-login.
-  const session = { ...s, role: user.role, name: user.name };
-  if (permission && !can(session.role, permission)) redirect("/dashboard?denied=1");
+  const modules = effectiveModules(user.role, user.modules);
+  const session: Session = { ...s, role: user.role, name: user.name, modules, perms: effectivePermissions(user.role, modules) };
+  if (permission && !can(session, permission)) redirect(`${homeFor(modules)}?denied=1`);
   return session;
 }
 
@@ -69,7 +71,8 @@ export async function requireApiSession(permission?: Permission): Promise<Sessio
   if (!s) throw new ApiError(401, "Not signed in");
   const user = await getActiveUser(s.userId);
   if (!user?.active || user.organizationId !== s.orgId) throw new ApiError(401, "Session no longer valid");
-  const session = { ...s, role: user.role, name: user.name };
-  if (permission && !can(session.role, permission)) throw new ApiError(403, "You do not have permission to do this");
+  const modules = effectiveModules(user.role, user.modules);
+  const session: Session = { ...s, role: user.role, name: user.name, modules, perms: effectivePermissions(user.role, modules) };
+  if (permission && !can(session, permission)) throw new ApiError(403, "You don't have access to this. Ask your admin to enable the module for you.");
   return session;
 }

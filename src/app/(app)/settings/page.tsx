@@ -33,7 +33,7 @@ const TABS = [
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; google?: string }> }) {
   const session = await requirePageSession();
   const sp = await searchParams;
-  const admin = can(session.role, "settings:manage");
+  const admin = can(session, "settings:manage");
   const isOwner = session.role === "OWNER";
   const tabs = admin ? TABS.filter(([k]) => k !== "billing" || isOwner) : TABS.filter(([k]) => k === "profile");
   const tab = tabs.find(([k]) => k === sp.tab)?.[0] ?? (admin ? (sp.google ? "integrations" : "company") : "profile");
@@ -74,9 +74,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 await db.user.findMany({
                   where: { organizationId: session.orgId },
                   orderBy: [{ active: "desc" }, { name: "asc" }],
-                  select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true },
+                  select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true, modules: true },
                 })
-              ).map((u) => ({ ...u, lastLoginAt: u.lastLoginAt?.toISOString() ?? null }))}
+              ).map((u) => ({ ...u, lastLoginAt: u.lastLoginAt?.toISOString() ?? null, modules: Array.isArray(u.modules) ? (u.modules as string[]) : null }))}
             />
           )}
           {tab === "templates" && <TemplatesPanel templates={await db.messageTemplate.findMany({ where: { organizationId: session.orgId }, orderBy: { name: "asc" } })} />}
