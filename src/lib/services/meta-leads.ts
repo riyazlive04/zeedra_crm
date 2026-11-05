@@ -161,7 +161,7 @@ async function formNameMap(org: OrgLite): Promise<Map<string, string>> {
 
 /** Webhook path: fetch one submission by its leadgen id. */
 export async function ingestLeadgenEvent(pageId: string, leadgenId: string) {
-  const org = await db.organization.findUnique({ where: { metaPageId: pageId }, select: { id: true, metaPageId: true, metaPageToken: true } });
+  const org = await db.organization.findFirst({ where: { metaPageId: pageId }, select: { id: true, metaPageId: true, metaPageToken: true } });
   if (!org?.metaPageToken) return "unknown-page" as const;
   const l = await graph<GraphLead>(`/${encodeURIComponent(leadgenId)}`, org.metaPageToken, { fields: LEAD_FIELDS });
   const names = new Map<string, string>();

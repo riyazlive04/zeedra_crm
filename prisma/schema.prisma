@@ -33,7 +33,7 @@ model Organization {
   waAccessToken   String?
   waBusinessId    String?
   // Meta Lead Ads (Facebook & Instagram): the connected Page and its Page access token
-  metaPageId        String?   @unique
+  metaPageId        String? // one Page per org — enforced when connecting
   metaPageName      String?
   metaPageToken     String?
   metaLeadsSyncedAt DateTime?
@@ -57,6 +57,8 @@ model Organization {
   counters      Counter[]
   solarDesigns  SolarDesign[]
   agreements    Agreement[]
+
+  @@index([metaPageId])
 }
 
 enum Role {

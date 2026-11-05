@@ -25,7 +25,7 @@ CREATE TABLE "MetaLead" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Organization_metaPageId_key" ON "Organization"("metaPageId");
+CREATE INDEX "Organization_metaPageId_idx" ON "Organization"("metaPageId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "MetaLead_organizationId_leadgenId_key" ON "MetaLead"("organizationId", "leadgenId");
