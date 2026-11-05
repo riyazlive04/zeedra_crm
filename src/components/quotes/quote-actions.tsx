@@ -9,7 +9,7 @@ import { NumberInput } from "../form-controls";
 import { api } from "@/lib/client";
 import { useToast } from "../toast";
 
-export function QuoteActions({ id, status, shareToken, canAccept, canRevise }: { id: string; status: string; shareToken: string | null; canAccept: boolean; canRevise?: boolean }) {
+export function QuoteActions({ id, status, shareToken, canAccept, canRevise, priceOnly = false }: { id: string; status: string; shareToken: string | null; canAccept: boolean; canRevise?: boolean; priceOnly?: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -53,12 +53,13 @@ export function QuoteActions({ id, status, shareToken, canAccept, canRevise }: {
           </Button>
         </>
       )}
-      {canRevise && status !== "ACCEPTED" && <ReviseQuotation id={id} />}
+      {canRevise && status !== "ACCEPTED" && <ReviseQuotation id={id} priceOnly={priceOnly} />}
     </div>
   );
 }
 
-function ReviseQuotation({ id }: { id: string }) {
+/** `priceOnly`: quotations from the quotation engine revise only their final price. */
+function ReviseQuotation({ id, priceOnly }: { id: string; priceOnly: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -98,7 +99,7 @@ function ReviseQuotation({ id }: { id: string }) {
         open={open}
         onClose={() => setOpen(false)}
         title="Revise quotation"
-        subtitle="System size stays the same — change the discount, set a final negotiated price, or update notes. The current version is kept as-is."
+        subtitle={priceOnly ? "The system stays the same — adjust the final quote price. The current version is kept as-is." : "System size stays the same — change the discount, set a final negotiated price, or update notes. The current version is kept as-is."}
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancel</Button>
@@ -109,15 +110,19 @@ function ReviseQuotation({ id }: { id: string }) {
         }
       >
         <div className="space-y-3">
-          <Field label="New discount (pre-GST)" hint="Leave blank to keep the current discount">
-            <NumberInput prefix="₹" value={discount} onChange={setDiscount} placeholder="Unchanged" />
-          </Field>
-          <Field label="Set a final price" hint="Overrides the computed total — GST is backed out automatically">
+          {!priceOnly && (
+            <Field label="New discount (pre-GST)" hint="Leave blank to keep the current discount">
+              <NumberInput prefix="₹" value={discount} onChange={setDiscount} placeholder="Unchanged" />
+            </Field>
+          )}
+          <Field label={priceOnly ? "Adjust Final Quote Price" : "Set a final price"} hint="Overrides the computed total — GST is backed out automatically">
             <NumberInput prefix="₹" value={finalPrice} onChange={setFinalPrice} placeholder="Unchanged" />
           </Field>
-          <Field label="Notes on the proposal">
-            <textarea className="input min-h-[64px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Leave blank to keep the current notes" />
-          </Field>
+          {!priceOnly && (
+            <Field label="Notes on the proposal">
+              <textarea className="input min-h-[64px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Leave blank to keep the current notes" />
+            </Field>
+          )}
         </div>
       </Modal>
     </>

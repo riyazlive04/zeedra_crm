@@ -51,11 +51,39 @@ body {
   display: inline;
 }
 
+/* Quotation document: A4 pages on screen and on paper */
+.quote-page {
+  position: relative;
+  width: 100%;
+  max-width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto 24px;
+  padding: 0 0 18mm;
+  background: white;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
+}
+
 @media print {
   .no-print {
     display: none !important;
   }
   body {
     background: white;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  .quote-page {
+    width: 210mm;
+    max-width: none;
+    height: 297mm;
+    min-height: 0;
+    margin: 0;
+    box-shadow: none;
+    overflow: hidden;
+    break-after: page;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

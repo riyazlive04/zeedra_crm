@@ -9,6 +9,8 @@ import { orgSettings } from "@/lib/api";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import { VerdictBadge, VERDICT_META } from "@/components/badges";
 import { ProposalDocument } from "@/components/quotes/proposal-document";
+import { QuotationDocument, docCompany } from "@/components/quotes/quotation-document";
+import { isQuotifySnapshot } from "@/lib/solar/quotify";
 import { QuoteActions, ReviewValidation } from "@/components/quotes/quote-actions";
 import { Map } from "@/components/map/map";
 import { humanize, formatINR } from "@/lib/text";
@@ -68,7 +70,7 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
             {q.lead.name} · {q.lead.code}
           </Link>
         </div>
-        <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} />
+        <QuoteActions id={q.id} status={q.status} shareToken={q.shareToken} canAccept={can(session.role, "leads:edit")} canRevise={isLatest && (reviewer || isOwner)} priceOnly={isQuotifySnapshot(q.quoteData)} />
       </div>
       {!isLatest && (
         <div className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -81,11 +83,15 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
       )}
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_380px]">
-        <ProposalDocument
-          q={{ ...q, lead: q.lead, org: q.organization, createdBy: q.createdBy }}
-          escalationPct={s.tariffEscalationPct}
-          degradationPct={s.degradationPct}
-        />
+        {isQuotifySnapshot(q.quoteData) ? (
+          <QuotationDocument snap={q.quoteData} number={q.number} version={q.version} createdAt={q.createdAt} company={docCompany(q.organization, s)} />
+        ) : (
+          <ProposalDocument
+            q={{ ...q, lead: q.lead, org: q.organization, createdBy: q.createdBy }}
+            escalationPct={s.tariffEscalationPct}
+            degradationPct={s.degradationPct}
+          />
+        )}
 
         <div className="no-print space-y-4">
           {revisions.length > 1 && (

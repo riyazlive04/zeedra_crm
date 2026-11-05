@@ -8,6 +8,7 @@ import { aiEnabled } from "@/lib/ai";
 import { googleConfigured } from "@/lib/google-calendar";
 import { PageHeader } from "@/components/ui";
 import { BRAND } from "@/lib/brand";
+import { QuotationPricesPanel } from "@/components/settings/quotation-prices-panel";
 import { BillingPanel, CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel, WorkflowPanel } from "@/components/settings/settings-panels";
 
 export const metadata = { title: "Settings" };
@@ -15,6 +16,7 @@ export const metadata = { title: "Settings" };
 const TABS = [
   ["company", "Company"],
   ["pricing", "Pricing & subsidy"],
+  ["quotation", "Quotation prices"],
   ["qualification", "Qualification"],
   ["field", "GPS validation"],
   ["schedule", "Scheduling"],
@@ -54,6 +56,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </nav>
         <div className="min-w-0">
           {tab === "company" && <CompanyPanel org={org} />}
+          {tab === "quotation" && <QuotationPricesPanel settings={settings} />}
           {(tab === "pricing" || tab === "qualification" || tab === "field" || tab === "schedule") && <RulesPanel key={tab} settings={settings} section={tab} />}
           {tab === "workflow" && (
             <WorkflowPanel

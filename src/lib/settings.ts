@@ -148,6 +148,42 @@ export const orgSettingsSchema = z.object({
       { upToKw: 3, amount: 22000 },
     ]),
 
+  // Quotation engine (src/lib/solar/quotify.ts) — the Prices screen: rates, inverter catalogue,
+  // brands and user-added rows, plus what prints on the quotation's terms page.
+  quotation: z
+    .object({
+      // Partial price sheet keyed like QUOTIFY_DEFAULTS; missing keys fall back to the defaults.
+      prices: z.record(z.union([z.number(), z.string()])).default({}),
+      custom: z
+        .object({
+          inv_1ph: z.array(z.object({ kw: z.number().positive(), price: z.number().positive() })).default([]),
+          inv_3ph: z.array(z.object({ kw: z.number().positive(), price: z.number().positive() })).default([]),
+          inv_hyb: z.array(z.object({ kw: z.number().positive(), price: z.number().positive() })).default([]),
+          panel_dcr: z.array(z.object({ w: z.number().positive(), perW: z.number().positive() })).default([]),
+          panel_ndcr: z.array(z.object({ w: z.number().positive(), perW: z.number().positive() })).default([]),
+          components: z.array(z.object({ name: z.string().min(1).max(80), price: z.number().positive(), perKw: z.boolean() })).default([]),
+        })
+        .default({}),
+      defaultPanelType: z.enum(["bifacial", "topcon", "hjt"]).default("bifacial"),
+      // Tamil Nadu G.O. 102 state top-up on DCR quotes.
+      stateSubsidy: z.boolean().default(true),
+      // Printed under "Payment Terms" on the terms page.
+      paymentStages: z
+        .array(z.object({ name: z.string().min(1).max(120), pct: z.number().min(0).max(100), when: z.string().max(300).default("") }))
+        .default([
+          { name: "on delivery of materials to site", pct: 50, when: "" },
+          { name: "after installation", pct: 50, when: "" },
+        ]),
+      bank: z
+        .object({ name: z.string().default(""), branch: z.string().default(""), accNo: z.string().default(""), ifsc: z.string().default("") })
+        .default({}),
+      // Signs the cover letter as "Managing Director"; blank = signed with the company name.
+      signatoryName: z.string().max(120).default(""),
+      // Optional second line under the company name in each page footer (e.g. branch offices).
+      footerLine: z.string().max(200).default(""),
+    })
+    .default({}),
+
   // Finance
   loanRatePct: z.number().min(0).max(30).default(7),
   loanTenureMonths: z.number().int().positive().default(84),

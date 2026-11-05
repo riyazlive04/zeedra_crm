@@ -11,6 +11,7 @@ export async function loadQuoteContext(session: Session, leadId: string) {
     select: {
       id: true, name: true, code: true, segment: true, monthlyBill: true, monthlyUnits: true, roofAreaSqft: true, sanctionedLoadKw: true,
       phase: true, lat: true, lng: true, sitePinned: true, paymentMode: true,
+      phone: true, address: true, city: true, pincode: true, consumerNumber: true,
     },
   });
   if (!lead) notFound();

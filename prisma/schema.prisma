@@ -444,6 +444,10 @@ model Quotation {
   inverterType    String  @default("On-grid String")
   structureType   String  @default("Hot-dip galvanised elevated")
   lineItems       Json // [{name, qty, unit, rate, amount}]
+  // Full snapshot of a quotation built by the quotation engine (src/lib/solar/quotify.ts): form
+  // inputs, the price sheet used, and the computed BoQ/ROI — so its document re-renders exactly
+  // even after prices change. Null for quotations made with the older sizing engine.
+  quoteData       Json?
   // Commercials
   subtotal        Float
   discount        Float   @default(0)

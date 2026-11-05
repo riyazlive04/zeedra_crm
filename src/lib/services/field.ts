@@ -4,7 +4,8 @@ import { z } from "zod";
 import { db } from "../db";
 import { parseSettings, type OrgSettings } from "../settings";
 import { validateFieldCapture, type FieldCapture, type ValidationResult } from "../geo";
-import { sizeSystem, type SizingResult } from "../solar/sizing";
+import { sizeSystem } from "../solar/sizing";
+import { computeQuotify, isQuotifySnapshot, quotationConfig, PANEL_TECH_LABEL, QuotifyInputError, type QuotifyInput, type QuotifySnapshot } from "../solar/quotify";
 import { loanPlan } from "../solar/finance";
 import { nextQuotationNumber } from "../counter";
 import { logActivity } from "../activity";
@@ -14,8 +15,8 @@ import { can } from "../rbac";
 import type { Session } from "../session";
 import { getLeadForSession, onStageChanged, createLead } from "./leads";
 import { formatINR, humanize } from "../text";
-import { buildLineItems, DEFAULT_TERMS } from "../solar/quote";
-import { leadContactSchema, basicQualSchema } from "../validators";
+import { buildLineItems } from "../solar/quote";
+import { leadCreateSchema } from "../validators";
 
 export const captureSchema = z
   .object({
@@ -137,54 +138,160 @@ export async function checkOut(session: Session, appointmentId: string, outcome:
 
 // ─── Quotations ──────────────────────────────────────────────────────────
 
-/** Minimal customer intake collected right inside the quote builder when there is no lead yet. */
-export const quickLeadSchema = leadContactSchema.merge(
-  basicQualSchema.pick({ monthlyBill: true, monthlyUnits: true, roofAreaSqft: true, sanctionedLoadKw: true, phase: true }),
-);
+const quoteFormSchema = z.object({
+  sizeMode: z.enum(["eb", "direct"]),
+  bimonthlyUnits: z.number().positive().max(10_000_000).nullable().optional(),
+  bimonthlyBill: z.number().positive().max(100_000_000).nullable().optional(),
+  directKw: z.number().positive().max(10_000).nullable().optional(),
+  structure: z.enum(["lowrise", "highrise"]),
+  floors: z.number().int().min(1).max(30).nullable().optional(),
+  dcCableSize: z.string().trim().min(1).max(10),
+  acCableSize: z.string().trim().min(1).max(10),
+  systemType: z.enum(["dcr", "ndcr", "hybrid", "micro"]),
+  panelType: z.enum(["bifacial", "topcon", "hjt"]),
+  panelWatt: z.number().int().min(100).max(1000).nullable().optional(),
+  panelBrand: z.string().trim().max(60).nullable().optional(),
+  inverterBrand: z.string().trim().max(60).nullable().optional(),
+  inverterPhase: z.enum(["single", "three"]),
+  inverterKw: z.number().min(0).max(10_000).nullable().optional(),
+  overrideTotal: z.number().min(1000).max(100_000_000).nullable().optional(),
+});
 
-export const quotationInputSchema = z
-  .object({
-    leadId: z.string().min(1).optional(),
-    newLead: quickLeadSchema.optional(),
-    appointmentId: z.string().nullable().optional(),
-    mode: z.enum(["FIELD", "OFFICE"]),
-    systemKw: z.number().positive().max(10000).nullable().optional(),
-    panelBrand: z.string().min(1).max(60),
-    panelWattage: z.number().int().min(100).max(800),
-    inverterBrand: z.string().min(1).max(60),
-    structureType: z.string().max(120).optional(),
-    discount: z.number().min(0).default(0),
-    manualTotalOverride: z.number().positive().max(100_000_000).nullable().optional(),
-    loan: z
-      .object({ enabled: z.boolean(), tenureMonths: z.number().int().min(6).max(240), ratePct: z.number().min(0).max(30), downPaymentPct: z.number().min(0).max(100) })
-      .optional(),
-    notes: z.string().max(2000).nullable().optional(),
-    capture: captureSchema.optional(),
-    deviceInfo: z.string().max(300).nullable().optional(),
-  })
-  .refine((d) => Boolean(d.leadId) !== Boolean(d.newLead), { message: "Provide either an existing lead or a new customer's details, not both", path: ["leadId"] });
+/** Customer Details card — printed on the cover letter, and used to create the lead when there is none. */
+const quoteCustomerSchema = z.object({
+  name: z.string().trim().min(2, "Customer name is required").max(120),
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Mobile number must be 10 digits."),
+  address: z.string().trim().max(300).default(""),
+  pincode: z.string().trim().regex(/^[1-9]\d{5}$/, "PIN code must be 6 digits."),
+  ebNumber: z.string().trim().max(30).default(""),
+});
+type QuoteCustomer = z.infer<typeof quoteCustomerSchema>;
+
+export const quotationInputSchema = z.object({
+  /** Omit to create the lead from the customer details. */
+  leadId: z.string().min(1).optional(),
+  customer: quoteCustomerSchema,
+  appointmentId: z.string().nullable().optional(),
+  mode: z.enum(["FIELD", "OFFICE"]),
+  quote: quoteFormSchema,
+  capture: captureSchema.optional(),
+  deviceInfo: z.string().max(300).nullable().optional(),
+});
 export type QuotationInput = z.infer<typeof quotationInputSchema>;
+
+const STRUCTURE_LABEL = { lowrise: "Ground Mount GI", highrise: "Elevated GI HDP" } as const;
+
+/**
+ * Prices a quotation with the quotation engine and maps it onto the Quotation row. `base` pins
+ * the price sheet (a revision re-prices with the sheet its original was made with).
+ */
+function priceQuotation(
+  s: OrgSettings,
+  companyName: string,
+  input: QuotifyInput,
+  customer: QuoteCustomer,
+  base?: Pick<QuotifySnapshot, "prices" | "custom" | "stateSubsidy" | "paymentStages">,
+) {
+  const cfg = quotationConfig(s);
+  const prices = base?.prices ?? cfg.P;
+  const custom = base?.custom ?? cfg.custom;
+  const stateSubsidy = base?.stateSubsidy ?? cfg.stateSubsidy;
+  let r;
+  try {
+    r = computeQuotify(input, prices, custom, { stateSubsidy, companyName });
+  } catch (e) {
+    if (e instanceof QuotifyInputError) throw new ApiError(400, e.message);
+    throw e;
+  }
+  const snapshot: QuotifySnapshot = {
+    v: 1,
+    input,
+    prices,
+    custom,
+    stateSubsidy,
+    paymentStages: base?.paymentStages ?? s.quotation.paymentStages,
+    customer,
+    result: r,
+  };
+  let savings25 = 0;
+  for (let y = 0, ys = r.savings.annualSave; y < 25; y++, ys *= 1.06) savings25 += ys;
+  const columns = {
+    systemKw: r.actualKw,
+    panelBrand: r.brands.panel,
+    panelWattage: r.panelWatt,
+    panelCount: r.panels,
+    panelType: PANEL_TECH_LABEL[input.panelType],
+    inverterBrand: r.brands.inverter,
+    inverterKw: r.inverterKw,
+    inverterType: r.sysLabel,
+    structureType: STRUCTURE_LABEL[input.structure],
+    lineItems: r.rows.map((x) => ({ name: x.content, spec: x.desc, make: x.make, qty: x.qty, unit: x.uom, rate: x.unit, amount: Math.round(x.sub) })) as unknown as Prisma.InputJsonValue,
+    quoteData: snapshot as unknown as Prisma.InputJsonValue,
+    subtotal: Math.round(r.preTax),
+    discount: 0,
+    marginAmount: r.margin,
+    manualOverride: r.overridden,
+    gstRate: r.blendPct,
+    gstAmount: Math.round(r.gst),
+    totalAmount: Math.round(r.grandTotal),
+    subsidyAmount: r.subsidy,
+    netCost: Math.round(r.netCost),
+    loanAmount: null,
+    loanRate: null,
+    loanTenureMonths: null,
+    emi: null,
+    annualGenerationKwh: Math.round(r.savings.annualUnits),
+    annualSavings: Math.round(r.savings.annualSave),
+    paybackYears: Math.round(r.savings.paybackYrs * 100) / 100,
+    savings25Years: Math.round(savings25),
+    co2TonnesPerYear: Math.round(((r.savings.annualUnits * s.gridEmissionFactor) / 1000) * 100) / 100,
+  };
+  return { r, columns };
+}
 
 export async function createQuotation(session: Session, input: QuotationInput) {
   if (input.mode === "OFFICE" && !can(session.role, "quotations:review"))
     throw new ApiError(403, "Field sales must create quotations on-site with GPS. Office quotations need manager rights.");
+
+  const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { name: true, settings: true } });
+  const s = parseSettings(org.settings);
+  const c = input.customer;
+  const q = input.quote as QuotifyInput;
+  // Price first, so a bad form never creates a lead.
+  const { r, columns } = priceQuotation(s, org.name, q, c);
 
   let lead: Lead;
   let leadCreated = false;
   let leadDuplicate = false;
   if (input.leadId) {
     lead = await getLeadForSession(session, input.leadId);
-  } else if (input.newLead) {
-    const created = await createLead(session.orgId, input.newLead, session.userId);
+    // Fill in what the lead was missing from the Customer Details card.
+    const fill: Prisma.LeadUpdateInput = {};
+    if (!lead.address && c.address) fill.address = c.address;
+    if (!lead.pincode && c.pincode) fill.pincode = c.pincode;
+    if (!lead.consumerNumber && c.ebNumber) fill.consumerNumber = c.ebNumber;
+    if (Object.keys(fill).length) lead = await db.lead.update({ where: { id: lead.id }, data: fill });
+  } else {
+    const created = await createLead(
+      session.orgId,
+      leadCreateSchema.parse({
+        name: c.name,
+        phone: c.phone,
+        address: c.address || null,
+        pincode: c.pincode,
+        consumerNumber: c.ebNumber || null,
+        source: "WALK_IN",
+        segment: "RESIDENTIAL",
+        phase: q.inverterPhase === "three" ? "THREE" : "SINGLE",
+        monthlyUnits: r.monthlyGridUnits ? Math.round(r.monthlyGridUnits) : null,
+        monthlyBill: q.sizeMode === "eb" && q.bimonthlyBill ? Math.round(q.bimonthlyBill / 2) : null,
+      }),
+      session.userId,
+    );
     lead = created.lead;
     leadCreated = !created.duplicate;
     leadDuplicate = created.duplicate;
-  } else {
-    throw new ApiError(400, "Provide either an existing lead or a new customer's details");
   }
-
-  const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { settings: true } });
-  const s = parseSettings(org.settings);
 
   let appointment: { id: string; startAt: Date; endAt: Date } | null = null;
   if (input.appointmentId) {
@@ -204,23 +311,6 @@ export async function createQuotation(session: Session, input: QuotationInput) {
     });
   }
 
-  const sz = sizeSystem(
-    {
-      monthlyBill: lead.monthlyBill,
-      monthlyUnits: lead.monthlyUnits,
-      segment: lead.segment,
-      roofAreaSqft: input.systemKw ? null : lead.roofAreaSqft,
-      sanctionedLoadKw: lead.sanctionedLoadKw,
-      phase: lead.phase,
-      overrideKw: input.systemKw ?? null,
-      panelWattage: input.panelWattage,
-      discount: input.discount,
-      manualTotalOverride: input.manualTotalOverride ?? null,
-    },
-    s,
-  );
-  if (!sz.monthlyUnits && !input.systemKw) throw new ApiError(400, "Capture the electricity bill/units or enter a system size first");
-
   let geoVerdict: GeoVerdict = "OFFICE_CREATED";
   let validation: ValidationResult | null = null;
   const capture = input.capture ?? null;
@@ -229,10 +319,6 @@ export async function createQuotation(session: Session, input: QuotationInput) {
     geoVerdict = validation.verdict;
   }
 
-  const loan = input.loan?.enabled
-    ? loanPlan(sz.netCost, sz.monthlySavings, input.loan.ratePct, input.loan.tenureMonths, input.loan.downPaymentPct)
-    : null;
-
   const quotation = await db.quotation.create({
     data: {
       organizationId: session.orgId,
@@ -240,35 +326,10 @@ export async function createQuotation(session: Session, input: QuotationInput) {
       leadId: lead.id,
       createdById: session.userId,
       appointmentId: appointment?.id ?? null,
-      systemKw: sz.recommendedKw,
-      panelBrand: input.panelBrand,
-      panelWattage: input.panelWattage,
-      panelCount: sz.panelCount,
-      inverterBrand: input.inverterBrand,
-      inverterKw: sz.inverterKw,
-      structureType: input.structureType || "Hot-dip galvanised elevated",
-      lineItems: buildLineItems(sz, { ...input, phase: lead.phase }, s) as unknown as Prisma.InputJsonValue,
-      subtotal: sz.subtotal,
-      discount: sz.discount,
-      marginAmount: sz.margin,
-      manualOverride: sz.manualOverride,
-      gstRate: s.gstRate,
-      gstAmount: sz.gstAmount,
-      totalAmount: sz.totalCost,
-      subsidyAmount: sz.subsidy,
-      netCost: sz.netCost,
-      loanAmount: loan?.loanAmount ?? null,
-      loanRate: loan?.ratePct ?? null,
-      loanTenureMonths: loan?.tenureMonths ?? null,
-      emi: loan?.emi ?? null,
-      annualGenerationKwh: sz.annualGenerationKwh,
-      annualSavings: sz.annualSavings,
-      paybackYears: sz.paybackYears,
-      savings25Years: sz.savings25Years,
-      co2TonnesPerYear: sz.co2TonnesPerYear,
+      ...columns,
       validUntil: new Date(Date.now() + s.quotationValidityDays * 86_400_000),
-      notes: input.notes ?? null,
-      terms: DEFAULT_TERMS,
+      notes: null,
+      terms: null,
       capturedLat: capture?.lat ?? null,
       capturedLng: capture?.lng ?? null,
       capturedAccuracyM: capture?.accuracyM ?? null,
@@ -297,14 +358,14 @@ export async function createQuotation(session: Session, input: QuotationInput) {
 
   await db.lead.update({
     where: { id: lead.id },
-    data: { recommendedKw: sz.recommendedKw, estimatedCost: sz.totalCost, subsidyAmount: sz.subsidy, lastContactAt: new Date() },
+    data: { recommendedKw: r.actualKw, estimatedCost: Math.round(r.grandTotal), subsidyAmount: r.subsidy, lastContactAt: new Date() },
   });
   await logActivity({
     orgId: session.orgId,
     leadId: lead.id,
     userId: session.userId,
     type: "QUOTATION",
-    title: `Quotation ${quotation.number} · ${sz.recommendedKw} kW · ${formatINR(sz.netCost)} net`,
+    title: `Quotation ${quotation.number} · ${r.actualKw} kW ${r.sysLabel} · ${formatINR(r.netCost)} net`,
     body: validation ? `Location check: ${humanize(validation.verdict)}${validation.distanceM != null ? ` (${validation.distanceM} m from site)` : ""}` : "Created from office",
     meta: { quotationId: quotation.id, verdict: geoVerdict } as Prisma.InputJsonValue,
   });
@@ -320,7 +381,6 @@ export async function createQuotation(session: Session, input: QuotationInput) {
   return {
     quotation,
     validation,
-    sizing: sz,
     lead: { id: lead.id, name: lead.name, code: lead.code },
     leadCreated,
     leadDuplicate,
@@ -338,11 +398,11 @@ export const reviseQuotationSchema = z.object({
 export type ReviseQuotationInput = z.infer<typeof reviseQuotationSchema>;
 
 /**
- * Non-destructive revision: the system size is kept as-is (resizing is a new quotation, not a
- * revision) but price terms — discount, a manual override, brands, structure, notes — can
- * change. The original row is marked superseded and kept forever as the exact snapshot it was
- * sent/reviewed as; the new row keeps the same quote number with `version` bumped and `parentId`
- * pointing at the lineage's original root quotation.
+ * Non-destructive revision: the system design is kept as-is (resizing is a new quotation, not a
+ * revision) but price terms — a manual final price, brands, notes (and a discount on older
+ * quotations) — can change. The original row is marked superseded and kept forever as the exact
+ * snapshot it was sent/reviewed as; the new row keeps the same quote number with `version` bumped
+ * and `parentId` pointing at the lineage's original root quotation.
  */
 export async function reviseQuotation(session: Session, quotationId: string, input: ReviseQuotationInput) {
   const prior = await db.quotation.findFirst({ where: { id: quotationId, organizationId: session.orgId }, include: { lead: true } });
@@ -354,35 +414,80 @@ export async function reviseQuotation(session: Session, quotationId: string, inp
   const latest = await db.quotation.aggregate({ where: { organizationId: session.orgId, OR: [{ id: rootId }, { parentId: rootId }] }, _max: { version: true } });
   const nextVersion = (latest._max.version ?? prior.version) + 1;
 
-  const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { settings: true } });
+  const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { name: true, settings: true } });
   const s = parseSettings(org.settings);
   const lead = prior.lead;
 
-  const panelBrand = input.panelBrand ?? prior.panelBrand;
-  const inverterBrand = input.inverterBrand ?? prior.inverterBrand;
-  const structureType = input.structureType ?? prior.structureType;
-  const sz = sizeSystem(
-    {
-      monthlyBill: lead.monthlyBill,
-      monthlyUnits: lead.monthlyUnits,
-      segment: lead.segment,
-      sanctionedLoadKw: lead.sanctionedLoadKw,
-      phase: lead.phase,
-      overrideKw: prior.systemKw, // a revision keeps the same system size
+  let priced: Omit<Prisma.QuotationUncheckedCreateInput, "organizationId" | "number" | "leadId" | "createdById" | "validUntil">;
+  let netCost: number;
+  if (isQuotifySnapshot(prior.quoteData)) {
+    const snap = prior.quoteData;
+    const quote: QuotifyInput = {
+      ...snap.input,
+      overrideTotal: input.manualTotalOverride !== undefined ? input.manualTotalOverride : snap.input.overrideTotal,
+      panelBrand: input.panelBrand ?? snap.input.panelBrand,
+      inverterBrand: input.inverterBrand ?? snap.input.inverterBrand,
+    };
+    const { r, columns } = priceQuotation(s, org.name, quote, snap.customer, snap);
+    priced = columns;
+    netCost = r.netCost;
+  } else {
+    const panelBrand = input.panelBrand ?? prior.panelBrand;
+    const inverterBrand = input.inverterBrand ?? prior.inverterBrand;
+    const structureType = input.structureType ?? prior.structureType;
+    const sz = sizeSystem(
+      {
+        monthlyBill: lead.monthlyBill,
+        monthlyUnits: lead.monthlyUnits,
+        segment: lead.segment,
+        sanctionedLoadKw: lead.sanctionedLoadKw,
+        phase: lead.phase,
+        overrideKw: prior.systemKw, // a revision keeps the same system size
+        panelWattage: prior.panelWattage,
+        discount: input.discount ?? prior.discount,
+        manualTotalOverride: input.manualTotalOverride !== undefined ? input.manualTotalOverride : prior.manualOverride ? prior.totalAmount : null,
+      },
+      s,
+    );
+    const loan = prior.loanAmount
+      ? loanPlan(sz.netCost, sz.monthlySavings, prior.loanRate ?? s.loanRatePct, prior.loanTenureMonths ?? s.loanTenureMonths, 0)
+      : null;
+    priced = {
+      systemKw: sz.recommendedKw,
+      panelBrand,
       panelWattage: prior.panelWattage,
-      discount: input.discount ?? prior.discount,
-      manualTotalOverride: input.manualTotalOverride !== undefined ? input.manualTotalOverride : prior.manualOverride ? prior.totalAmount : null,
-    },
-    s,
-  );
-  const loan = prior.loanAmount
-    ? loanPlan(sz.netCost, sz.monthlySavings, prior.loanRate ?? s.loanRatePct, prior.loanTenureMonths ?? s.loanTenureMonths, 0)
-    : null;
+      panelCount: sz.panelCount,
+      inverterBrand,
+      inverterKw: sz.inverterKw,
+      structureType,
+      lineItems: buildLineItems(sz, { panelBrand, panelWattage: prior.panelWattage, inverterBrand, structureType, phase: lead.phase }, s) as unknown as Prisma.InputJsonValue,
+      subtotal: sz.subtotal,
+      discount: sz.discount,
+      marginAmount: sz.margin,
+      manualOverride: sz.manualOverride,
+      gstRate: s.gstRate,
+      gstAmount: sz.gstAmount,
+      totalAmount: sz.totalCost,
+      subsidyAmount: sz.subsidy,
+      netCost: sz.netCost,
+      loanAmount: loan?.loanAmount ?? null,
+      loanRate: loan?.ratePct ?? null,
+      loanTenureMonths: loan?.tenureMonths ?? null,
+      emi: loan?.emi ?? null,
+      annualGenerationKwh: sz.annualGenerationKwh,
+      annualSavings: sz.annualSavings,
+      paybackYears: sz.paybackYears,
+      savings25Years: sz.savings25Years,
+      co2TonnesPerYear: sz.co2TonnesPerYear,
+    };
+    netCost = sz.netCost;
+  }
 
   const [, revision] = await db.$transaction([
     db.quotation.updateMany({ where: { organizationId: session.orgId, OR: [{ id: rootId }, { parentId: rootId }], supersededAt: null }, data: { supersededAt: new Date() } }),
     db.quotation.create({
       data: {
+        ...priced,
         organizationId: session.orgId,
         number: prior.number,
         version: nextVersion,
@@ -391,32 +496,6 @@ export async function reviseQuotation(session: Session, quotationId: string, inp
         createdById: session.userId,
         appointmentId: prior.appointmentId,
         status: "DRAFT",
-        systemKw: sz.recommendedKw,
-        panelBrand,
-        panelWattage: prior.panelWattage,
-        panelCount: sz.panelCount,
-        inverterBrand,
-        inverterKw: sz.inverterKw,
-        structureType,
-        lineItems: buildLineItems(sz, { panelBrand, panelWattage: prior.panelWattage, inverterBrand, structureType, phase: lead.phase }, s) as unknown as Prisma.InputJsonValue,
-        subtotal: sz.subtotal,
-        discount: sz.discount,
-        marginAmount: sz.margin,
-        manualOverride: sz.manualOverride,
-        gstRate: s.gstRate,
-        gstAmount: sz.gstAmount,
-        totalAmount: sz.totalCost,
-        subsidyAmount: sz.subsidy,
-        netCost: sz.netCost,
-        loanAmount: loan?.loanAmount ?? null,
-        loanRate: loan?.ratePct ?? null,
-        loanTenureMonths: loan?.tenureMonths ?? null,
-        emi: loan?.emi ?? null,
-        annualGenerationKwh: sz.annualGenerationKwh,
-        annualSavings: sz.annualSavings,
-        paybackYears: sz.paybackYears,
-        savings25Years: sz.savings25Years,
-        co2TonnesPerYear: sz.co2TonnesPerYear,
         validUntil: new Date(Date.now() + s.quotationValidityDays * 86_400_000),
         notes: input.notes !== undefined ? input.notes : prior.notes,
         terms: prior.terms,
@@ -439,9 +518,9 @@ export async function reviseQuotation(session: Session, quotationId: string, inp
     leadId: prior.leadId,
     userId: session.userId,
     type: "QUOTATION",
-    title: `Quotation ${prior.number} revised to R${nextVersion} · ${formatINR(sz.netCost)} net`,
+    title: `Quotation ${prior.number} revised to R${nextVersion} · ${formatINR(netCost)} net`,
     meta: { quotationId: revision.id, priorId: prior.id } as Prisma.InputJsonValue,
   });
 
-  return { quotation: revision, sizing: sz };
+  return { quotation: revision };
 }

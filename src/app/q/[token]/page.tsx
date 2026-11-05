@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { parseSettings } from "@/lib/settings";
 import { ProposalDocument } from "@/components/quotes/proposal-document";
+import { QuotationDocument, docCompany } from "@/components/quotes/quotation-document";
+import { isQuotifySnapshot } from "@/lib/solar/quotify";
 import { logActivity, notify } from "@/lib/activity";
 import { PrintButton } from "./print-button";
 
@@ -32,7 +34,11 @@ export default async function PublicQuotePage({ params }: { params: Promise<{ to
           This proposal has expired. Please contact {q.createdBy.name} for updated pricing.
         </div>
       )}
-      <ProposalDocument q={{ ...q, lead: q.lead, org: q.organization, createdBy: q.createdBy }} escalationPct={s.tariffEscalationPct} degradationPct={s.degradationPct} />
+      {isQuotifySnapshot(q.quoteData) ? (
+        <QuotationDocument snap={q.quoteData} number={q.number} version={q.version} createdAt={q.createdAt} company={docCompany(q.organization, s)} />
+      ) : (
+        <ProposalDocument q={{ ...q, lead: q.lead, org: q.organization, createdBy: q.createdBy }} escalationPct={s.tariffEscalationPct} degradationPct={s.degradationPct} />
+      )}
       <div className="no-print mx-auto mt-4 flex max-w-[860px] justify-center gap-2">
         <PrintButton />
         {q.createdBy.phone && (
