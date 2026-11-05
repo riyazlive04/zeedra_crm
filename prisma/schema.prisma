@@ -55,6 +55,7 @@ model Organization {
   auditLogs     AuditLog[]
   notifications Notification[]
   counters      Counter[]
+  solarDesigns  SolarDesign[]
   agreements    Agreement[]
 }
 
@@ -285,6 +286,7 @@ model Lead {
   messages     WhatsAppMessage[]
   tasks        Task[]
   project      Project?
+  solarDesigns SolarDesign[]
 
   @@unique([organizationId, code])
   @@index([organizationId, stage])
@@ -751,4 +753,33 @@ model AutomationRun {
 
   @@unique([ruleId, refKey])
   @@index([createdAt])
+}
+
+// ─── Roof design & shading ───────────────────────────────────────────────
+
+/// A rooftop layout drawn on satellite imagery: roof zones, blockers, module layout and the
+/// latest shading analysis. `data` is DesignData (src/lib/solar/shading.ts).
+model SolarDesign {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String?
+  name           String
+  lat            Float
+  lng            Float
+  data           Json
+  panelCount     Int      @default(0)
+  systemKw       Float    @default(0)
+  shadingLossPct Float?
+  annualKwh      Float?
+  /// Public read-only preview link (/d/<token>) for the customer; null = not shared.
+  shareToken     String?  @unique
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, updatedAt])
+  @@index([leadId])
 }

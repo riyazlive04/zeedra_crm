@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarDays, Smartphone, FileText, MessageCircle, MapPinned, Hammer, Workflow,
-  Calculator, Settings, Bell, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
+  Calculator, Settings, Bell, Sun, Gauge, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
 } from "lucide-react";
 import { Avatar } from "./ui";
 import { api } from "@/lib/client";
@@ -36,8 +36,10 @@ const NAV: { href: string; label: string; icon: typeof Users; perm: keyof NavPer
   { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle, perm: "whatsapp" },
   { href: "/field", label: "Field App", icon: Smartphone, perm: "field", section: "Field" },
   { href: "/quotations", label: "Quotations", icon: FileText, perm: "quotations" },
+  { href: "/designs", label: "Roof Design", icon: Sun, perm: "leads" },
   { href: "/tracking", label: "Field Tracking", icon: MapPinned, perm: "tracking" },
   { href: "/projects", label: "Installations", icon: Hammer, perm: "projects", section: "Delivery" },
+  { href: "/pm-dashboard", label: "PM Dashboard", icon: Gauge, perm: "projects" },
   { href: "/automations", label: "Automations", icon: Workflow, perm: "automations", section: "Workspace" },
   { href: "/calculator", label: "Solar Calculator", icon: Calculator, perm: "leads" },
   { href: "/settings", label: "Settings", icon: Settings, perm: "settings" },

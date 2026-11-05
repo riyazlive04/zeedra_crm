@@ -8,8 +8,7 @@ import { format } from "date-fns";
 import clsx from "clsx";
 import {
   Phone, MessageCircle, CalendarPlus, FileText, Sparkles, Copy, Send, StickyNote, PhoneCall, MapPin, ShieldCheck, Clock3,
-  Bot, ArrowRightLeft, Trophy, XCircle, CheckCircle2, AlertTriangle, Landmark, ClipboardCheck, Hammer, ChevronRight, Info,
-} from "lucide-react";
+  Bot, ArrowRightLeft, Trophy, XCircle, CheckCircle2, AlertTriangle, Landmark, ClipboardCheck, Hammer, ChevronRight, Info, Sun } from "lucide-react";
 import { Avatar, Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, ProgressBar } from "../ui";
 import { StageBadge, TemperatureBadge, VerdictBadge, STAGE_LABEL } from "../badges";
 import { NumberInput, Segmented, YesNo } from "../form-controls";
@@ -119,6 +118,11 @@ export function LeadWorkspace({ lead, settings, users, templates, activities, me
               <Button onClick={() => setBookOpen(true)}>
                 <CalendarPlus className="h-4 w-4 text-sky-600" /> Book visit
               </Button>
+            )}
+            {perms.edit && (
+              <ButtonLink href={`/designs?leadId=${lead.id}`}>
+                <Sun className="h-4 w-4 text-amber-500" /> Roof design
+              </ButtonLink>
             )}
             {perms.createQuote && (
               <ButtonLink href={quoteHref} variant="primary">

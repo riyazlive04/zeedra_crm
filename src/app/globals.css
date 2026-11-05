@@ -117,3 +117,8 @@ body {
     print-color-adjust: exact;
   }
 }
+
+/* Roof design editor — teal range sliders (sun path date/time, overlay opacity) */
+.sun-range { -webkit-appearance: none; appearance: none; height: 8px; border-radius: 9999px; background: #e2e8f0; outline: none; }
+.sun-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 9999px; background: #0d9488; border: 3px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: pointer; }
+.sun-range::-moz-range-thumb { width: 18px; height: 18px; border-radius: 9999px; background: #0d9488; border: 3px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: pointer; }
