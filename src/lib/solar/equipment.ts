@@ -207,19 +207,19 @@ export function autoString(orderedPanels: string[], mod: ModuleModel, inverters:
   const N = orderedPanels.length;
   const maxLen = Math.min(...slots.map((s) => s.lim.max));
   const minLen = Math.max(...slots.map((s) => s.lim.min));
-  if (maxLen < minLen) return { strings: [], unstrung: orderedPanels, warnings: ["No valid string length for this module/inverter at site temperatures"] };
+  if (maxLen < minLen) return { strings: [], unstrung: orderedPanels, warnings: ["This module and inverter don't work together at your site's temperatures. Pick a different inverter."] };
   // Fewest strings that keep every string ≤ maxLen.
   let count = Math.max(1, Math.ceil(N / maxLen));
   if (count > slots.length) {
     count = slots.length;
-    warnings.push(`Inverters can take ${slots.length * maxLen} modules; ${N - slots.length * maxLen} left unstrung. Add an inverter`);
+    warnings.push(`The inverter can only take ${slots.length * maxLen} of your ${N} modules. Add another inverter or choose a bigger one.`);
   }
   // Prefer equal lengths: if N splits unevenly, drop panels that don't fit rather than mix lengths on one MPPT.
   let len = Math.min(maxLen, Math.floor(N / count));
   if (len < minLen) {
     count = Math.floor(N / minLen);
     len = minLen;
-    if (count === 0) return { strings: [], unstrung: orderedPanels, warnings: [`Need at least ${minLen} modules per string for this inverter`] };
+    if (count === 0) return { strings: [], unstrung: orderedPanels, warnings: [`This inverter needs at least ${minLen} modules in a string to start up. Add more modules or pick a smaller inverter.`] };
   }
   let extra = Math.min(N - len * count, count);
   if (len + 1 > maxLen) extra = 0;
@@ -232,7 +232,7 @@ export function autoString(orderedPanels: string[], mod: ModuleModel, inverters:
     cursor += n;
   }
   const unstrung = orderedPanels.slice(cursor);
-  if (unstrung.length) warnings.push(`${unstrung.length} module(s) don't fit a valid string length. Remove them or add an inverter`);
+  if (unstrung.length) warnings.push(`${unstrung.length} module${unstrung.length === 1 ? "" : "s"} couldn't be wired into a safe string. Remove ${unstrung.length === 1 ? "it" : "them"} or add another inverter.`);
   return { strings, unstrung, warnings };
 }
 

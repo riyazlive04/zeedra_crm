@@ -365,22 +365,40 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
   const activeIds = new Set(scene.panels.filter((p) => !p.removed).map(panelId));
   const leftToString = [...activeIds].filter((p) => !strung.has(p)).length;
   const runAutoString = () => {
+    const panels = order.filter((p) => activeIds.has(p));
+    if (!panels.length) return toast.error("There are no modules to wire yet", "Draw a zone and fill it with panels first.");
+    const kw = summary.systemKw;
+    const totalAc = (list: typeof inverters) => list.reduce((a, i) => a + i.model.acKw, 0);
+    const tryWith = (list: typeof inverters) => autoString(panels, moduleModel, list, temps);
+    // The user's own inverters are kept if they can take the whole array without heavy clipping.
+    const fitsAsIs = (list: typeof inverters) => list.length > 0 && totalAc(list) >= kw / 1.35 && tryWith(list).unstrung.length === 0;
+
     let invs = inverters;
-    if (!invs.length) {
-      const phase = summary.systemKw > 6 ? "three" : "single";
-      const sug = suggestInverter(summary.systemKw, phase, [...customInvs, ...INVERTERS]);
-      if (!sug) return toast.error("No suitable inverter in the catalog");
-      // If even the largest suitable model is too small, use several (DC/AC ≤ 1.3).
-      const count = Math.max(1, Math.ceil(summary.systemKw / 1.3 / sug.acKw - 1e-9));
-      const insts = Array.from({ length: count }, () => ({ id: uid("i"), modelId: sug.id }));
-      invs = insts.map((inst) => ({ inst, model: sug }));
-      update((d) => ({ ...d, inverters: insts }));
-      toast.success(`Added ${count > 1 ? `${count} × ` : ""}${sug.brand} ${sug.model}`);
+    let note: string | null = null;
+    if (!fitsAsIs(invs)) {
+      // Above ~6 kW Indian homes are on three-phase supply; below that keep the phase the user picked.
+      const phase: "single" | "three" = kw > 6 ? "three" : (inverters[0]?.model.phase ?? "single");
+      const sug = suggestInverter(kw, phase, [...customInvs, ...INVERTERS]);
+      if (!sug) return toast.error("No inverter in the catalog suits this array", "Add a custom inverter with + Inverter.");
+      // Fewest units that take every module and keep DC/AC at or below ~1.3.
+      let count = Math.max(1, Math.ceil(kw / 1.3 / sug.acKw - 1e-9));
+      let plan = Array.from({ length: count }, () => ({ inst: { id: uid("i"), modelId: sug.id }, model: sug }));
+      while (tryWith(plan).unstrung.length > 0 && count < 8) {
+        count++;
+        plan = Array.from({ length: count }, () => ({ inst: { id: uid("i"), modelId: sug.id }, model: sug }));
+      }
+      const label = `${count > 1 ? `${count} × ` : ""}${sug.brand} ${sug.model} (${count * sug.acKw} kW)`;
+      note = invs.length
+        ? `${invs.map((i) => `${i.model.brand} ${i.model.model}`).join(", ")} is too small for ${kw} kWp, so Auto-string switched to ${label}. Press Ctrl+Z to undo.`
+        : `Picked ${label} for your ${kw} kWp array.`;
+      invs = plan;
+      update((d) => ({ ...d, inverters: plan.map((p) => p.inst) }));
     }
-    const r = autoString(order.filter((p) => activeIds.has(p)), moduleModel, invs, temps);
+    const r = tryWith(invs);
     update((d) => ({ ...d, strings: r.strings }));
-    r.warnings.forEach((w) => toast.error(w));
-    if (r.strings.length) toast.success(`${r.strings.length} string(s): ${r.strings.map((s) => s.panels.length).join(" + ")} modules`);
+    const summaryLine = r.strings.length ? `${r.strings.length} string${r.strings.length === 1 ? "" : "s"} of ${[...new Set(r.strings.map((s) => s.panels.length))].join(" / ")} modules` : "";
+    if (r.unstrung.length) toast.error(r.warnings[r.warnings.length - 1] ?? "Some modules couldn't be wired", note ?? undefined);
+    else toast.success(note ? "Inverters sized and strings wired" : `Wired ${panels.length} modules`, [note, summaryLine].filter(Boolean).join(" "));
   };
   const finishManualString = () => {
     if (!activeString?.length) return setActiveString(null);

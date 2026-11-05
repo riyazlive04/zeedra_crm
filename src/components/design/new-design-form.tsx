@@ -42,14 +42,36 @@ export function NewDesignForm({ lead }: { lead: Lead | null }) {
     }
   };
 
-  const locate = () => {
-    if (!navigator.geolocation) return toast.error("Location isn't available in this browser");
+  const locate = async () => {
+    if (!navigator.geolocation) return toast.error("This browser can't share your location", "Search the address or click the roof on the map instead.");
+    // Browsers only allow location on HTTPS (or localhost).
+    if (!window.isSecureContext) return toast.error("Location needs a secure (https://) connection", "Open the app on its https:// address, or click the roof on the map.");
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (p) => { setPick({ lat: p.coords.latitude, lng: p.coords.longitude, label: "My current location" }); setLocating(false); },
-      () => { toast.error("Couldn't get your location"); setLocating(false); },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    const ask = (highAccuracy: boolean, timeout: number) =>
+      new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: highAccuracy, timeout, maximumAge: highAccuracy ? 0 : 300000 }),
+      );
+    try {
+      let p: GeolocationPosition;
+      try {
+        // GPS first (phones on site)…
+        p = await ask(true, 8000);
+      } catch (e) {
+        if ((e as GeolocationPositionError).code === 1) throw e;
+        // …then Wi-Fi / network location, which laptops and desktops without GPS can usually give.
+        p = await ask(false, 15000);
+      }
+      const acc = Math.round(p.coords.accuracy);
+      setPick({ lat: p.coords.latitude, lng: p.coords.longitude, label: acc > 100 ? `Approximate location (±${acc} m), click the exact roof` : `My current location (±${acc} m)` });
+      if (acc > 100) toast.info("Got an approximate location", "Zoom in and click the exact roof to place the pin.");
+    } catch (e) {
+      const code = (e as GeolocationPositionError).code;
+      if (code === 1) toast.error("Location permission is blocked", "Click the lock icon in the address bar, allow Location for this site, then try again.");
+      else if (code === 3) toast.error("Location took too long", "Try again, or search the address / click the roof on the map.");
+      else toast.error("Your device couldn't find its location", "Turn on location services (Windows: Settings › Privacy › Location), or click the roof on the map.");
+    } finally {
+      setLocating(false);
+    }
   };
 
   const create = async () => {

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { NewDesignForm } from "@/components/design/new-design-form";
+import { DeleteDesignButton } from "@/components/design/delete-design-button";
 
 export const metadata = { title: "Roof Design & Shading" };
 
@@ -41,6 +42,7 @@ export default async function DesignsPage({ searchParams }: { searchParams: Prom
                   <th className="px-4 py-3 text-right">Modules</th>
                   <th className="px-4 py-3 text-right">Shading loss</th>
                   <th className="px-4 py-3 text-right">Updated</th>
+                  {canEdit && <th className="w-12 px-2 py-3" />}
                 </tr>
               </thead>
               <tbody>
@@ -52,6 +54,7 @@ export default async function DesignsPage({ searchParams }: { searchParams: Prom
                     <td className="px-4 py-3 text-right">{d.panelCount}</td>
                     <td className="px-4 py-3 text-right">{d.shadingLossPct == null ? "-" : `${d.shadingLossPct.toFixed(1)}%`}</td>
                     <td className="px-4 py-3 text-right text-slate-500">{formatDistanceToNow(d.updatedAt, { addSuffix: true })}</td>
+                    {canEdit && <td className="px-2 py-3 text-right"><DeleteDesignButton id={d.id} name={d.name} /></td>}
                   </tr>
                 ))}
               </tbody>
