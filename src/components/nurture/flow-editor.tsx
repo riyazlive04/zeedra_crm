@@ -9,14 +9,15 @@ import {
 } from "@xyflow/react";
 import clsx from "clsx";
 import {
-  ArrowLeft, Plus, Save, Check, Loader2, Trash2, Wand2, Settings2, BarChart3, UserPlus, X, MessageCircle, Clock, Reply, GitBranch, Zap, Flag, Play,
+  ArrowLeft, Plus, Save, Check, Loader2, Trash2, Wand2, Settings2, BarChart3, UserPlus, X, MessageCircle, Clock, Reply, GitBranch, Zap, Flag, Play, AlertTriangle,
 } from "lucide-react";
 import { api } from "@/lib/client";
 import { useToast } from "@/components/toast";
-import { CONDITION_FIELDS, type Condition } from "@/lib/automation/types";
+import { CONDITION_FIELDS, TRIGGERS, type Condition } from "@/lib/automation/types";
 import {
-  ACTION_TYPE_LABELS, autoLayout, DEFAULT_SETTINGS, FLOW_TRIGGER_LABELS, NODE_META, outputHandles, validateFlow,
-  type FlowAction, type FlowGraph, type FlowNodeData, type FlowSettings, type NodeKind,
+  ACTION_TYPE_LABELS, autoLayout, DEFAULT_SETTINGS, FLOW_OWNED_TRIGGERS, FLOW_TRIGGER_LABELS, flowWarnings, NODE_META, outputHandles, overlappingRuleTriggers,
+  removeReplyOption, validateFlow,
+  type FlowAction, type FlowGraph, type FlowNodeData, type FlowSettings, type FlowWarning, type NodeKind,
 } from "@/lib/nurture/types";
 
 export interface FlowInit {
@@ -27,6 +28,8 @@ export interface FlowInit {
   settings: FlowSettings;
 }
 type Template = { key: string; name: string; body: string; active: boolean; metaTemplateName: string | null };
+type RuleRef = { id: string; name: string; trigger: string };
+type FlowRef = { id: string; name: string; trigger: string; keywords: string[] };
 type NodeStats = Record<string, { entered: number; outcomes: Record<string, number>; sent: number; delivered: number; read: number; failed: number }>;
 type Stats = { nodes: NodeStats; totals: Record<string, number>; runs: { id: string; status: string; currentNodeId: string | null; nextRunAt: string | null; stopReason: string | null; startedAt: string; lead: { id: string; name: string; code: string } }[] };
 
@@ -74,12 +77,13 @@ function summary(d: FlowNodeData, templates: Template[]): string {
 }
 
 // Shared editor state for custom nodes (keeps functions out of the saved graph).
-const Ctx = createContext<{ templates: Template[]; stats: NodeStats | null; onAdd: (nodeId: string, handle: string, x: number, y: number) => void; connected: Set<string> }>({
-  templates: [], stats: null, onAdd: () => {}, connected: new Set(),
+const Ctx = createContext<{ templates: Template[]; stats: NodeStats | null; onAdd: (nodeId: string, handle: string, x: number, y: number) => void; connected: Set<string>; warned: Map<string, string[]> }>({
+  templates: [], stats: null, onAdd: () => {}, connected: new Set(), warned: new Map(),
 });
 
 function FlowNodeCard({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
-  const { templates, stats, onAdd, connected } = useContext(Ctx);
+  const { templates, stats, onAdd, connected, warned } = useContext(Ctx);
+  const warn = warned.get(id);
   const meta = NODE_META[data.kind];
   const Icon = ICONS[data.kind];
   const outs = outputHandles(data);
@@ -89,6 +93,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
       {data.kind !== "trigger" && <Handle type="target" position={Position.Left} id="in" className="!h-3 !w-3 !border-2 !border-white" style={{ background: meta.color }} />}
       <div className="flex items-center gap-2 rounded-t-[10px] px-3 py-1.5 text-xs font-semibold text-white" style={{ background: meta.color }}>
         <Icon className="h-3.5 w-3.5" /> {meta.label}
+        {warn && <span className="rounded-full bg-amber-400 px-1.5 text-[10px] text-amber-950" title={warn.join("\n")}>⚠ Check</span>}
         {st && (
           <span className="ml-auto rounded-full bg-white/25 px-1.5 text-[10px]" title="Leads that reached this step">
             👥 {st.entered}
@@ -160,7 +165,9 @@ const fromRF = (nodes: Node<FlowNodeData>[], edges: Edge[]): FlowGraph => ({
   edges: edges.map((e) => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle ?? "next", target: e.target })),
 });
 
-export function FlowEditor(props: { init: FlowInit; canEdit: boolean }) {
+type EditorProps = { init: FlowInit; canEdit: boolean; connected: boolean; rules: RuleRef[]; otherFlows: FlowRef[] };
+
+export function FlowEditor(props: EditorProps) {
   return (
     <ReactFlowProvider>
       <Editor {...props} />
@@ -168,7 +175,7 @@ export function FlowEditor(props: { init: FlowInit; canEdit: boolean }) {
   );
 }
 
-function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
+function Editor({ init, canEdit, connected: waConnected, rules, otherFlows }: EditorProps) {
   const toast = useToast();
   const rf = useReactFlow();
   const initial = useMemo(() => toRF(init.graph), [init.graph]);
@@ -183,17 +190,36 @@ function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [showStats, setShowStats] = useState(true);
-  const [panel, setPanel] = useState<null | "settings" | "runs" | "test">(null);
+  const [panel, setPanel] = useState<null | "settings" | "runs" | "test" | "checks">(null);
+  const [ruleList, setRuleList] = useState(rules);
   const [adder, setAdder] = useState<{ nodeId: string; handle: string; x: number; y: number } | null>(null);
 
+  const loadStats = useCallback(() => api<Stats>(`/api/flows/${init.id}/stats`).then(setStats).catch(() => {}), [init.id]);
   useEffect(() => {
     api<Template[]>("/api/templates").then(setTemplates).catch(() => {});
-    api<Stats>(`/api/flows/${init.id}/stats`).then(setStats).catch(() => {});
-  }, [init.id]);
+    loadStats();
+    // Keep the counts on the map and the Runs panel fresh while the page is open.
+    const t = setInterval(() => { if (document.visibilityState === "visible") loadStats(); }, 30_000);
+    return () => clearInterval(t);
+  }, [loadStats]);
 
   const graph = useMemo(() => fromRF(nodes, edges), [nodes, edges]);
   const issues = useMemo(() => validateFlow(graph), [graph]);
   const connected = useMemo(() => new Set(edges.map((e) => `${e.source}:${e.sourceHandle}`)), [edges]);
+  const warnings = useMemo(() => flowWarnings(graph, templates), [graph, templates]);
+  const warned = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const w of warnings) if (w.nodeId) m.set(w.nodeId, [...(m.get(w.nodeId) ?? []), w.text]);
+    return m;
+  }, [warnings]);
+  const trig = nodes.find((n) => n.data.kind === "trigger")?.data as Extract<FlowNodeData, { kind: "trigger" }> | undefined;
+  const overlapRules = useMemo(() => (trig ? ruleList.filter((r) => overlappingRuleTriggers(trig.trigger).includes(r.trigger)) : []), [trig, ruleList]);
+  const overlapFlows = useMemo(() => {
+    if (!trig || trig.trigger === "MANUAL") return [];
+    const kws = trig.keywords.map((k) => k.toLowerCase());
+    return otherFlows.filter((f) => f.trigger === trig.trigger && (trig.trigger !== "KEYWORD" || f.keywords.some((k) => kws.includes(k.toLowerCase()))));
+  }, [trig, otherFlows]);
+  const checkCount = issues.length + warnings.length + overlapRules.length + overlapFlows.length;
 
   const mark = () => setDirty(true);
   const onNodesChange = useCallback((c: NodeChange<Node<FlowNodeData>>[]) => {
@@ -241,6 +267,12 @@ function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
     setEdges((es) => es.filter((e) => e.source !== id || outputHandles(d).some((h) => h.id === e.sourceHandle)));
     mark();
   };
+  const removeOption = (id: string, index: number) => {
+    setNodes((ns) => ns.map((n) => (n.id === id && n.data.kind === "waitReply" ? { ...n, data: { ...n.data, options: n.data.options.filter((_, j) => j !== index) } } : n)));
+    // Later options move up one slot; their branches move with them.
+    setEdges((es) => removeReplyOption(es, id, index));
+    mark();
+  };
   const deleteNode = (id: string) => {
     setNodes((ns) => ns.filter((n) => n.id !== id));
     setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
@@ -252,18 +284,34 @@ function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
     if (!canEdit) return;
     setSaving(true);
     try {
-      await api(`/api/flows/${init.id}`, { method: "PATCH", body: { name, graph, settings, ...patch } });
+      const r = await api<{ removedRuns?: number }>(`/api/flows/${init.id}`, { method: "PATCH", body: { name, graph, settings, ...patch } });
       setDirty(false);
+      const removed = r?.removedRuns ? `${r.removedRuns} lead${r.removedRuns === 1 ? " was" : "s were"} on a step you deleted, so they left the flow.` : undefined;
       if (patch.active !== undefined) {
         setActive(patch.active);
-        toast.success(patch.active ? "Flow is live" : "Flow paused");
-      } else toast.success("Flow saved");
+        if (patch.active)
+          toast.success("Flow is live", removed ?? (waConnected ? "Matching leads will now get this journey on WhatsApp." : "Simulation mode: messages are logged in the WhatsApp inbox, not really sent."));
+        else toast.success("Flow paused", removed ?? "No new leads will enter. Leads already inside stay where they are until you go live again.");
+      } else toast.success("Flow saved", removed ?? (active ? "Changes apply to leads straight away." : undefined));
+      loadStats();
+      return true;
     } catch (e) {
       toast.error("Couldn't save", (e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [canEdit, init.id, name, graph, settings, toast]);
+  }, [canEdit, init.id, name, graph, settings, toast, waConnected, active, loadStats]);
+
+  /** Go live: blocking problems first, then (on live WhatsApp) a last look at delivery warnings. */
+  const goLive = async (confirmed = false) => {
+    if (issues.length) {
+      setPanel("checks");
+      return toast.error("Fix this before going live", issues[0]);
+    }
+    if (waConnected && !confirmed && checkCount > 0) return setPanel("checks");
+    if ((await save({ active: true })) && checkCount > 0 && !waConnected) setPanel("checks");
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -284,18 +332,22 @@ function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
         <input value={name} disabled={!canEdit} onChange={(e) => { setName(e.target.value); mark(); }} className="min-w-0 max-w-[320px] rounded px-1 text-base font-semibold text-teal-700 hover:bg-slate-50 focus:outline-none" />
         <span className={clsx("rounded-full px-2 py-0.5 text-xs font-semibold", active ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500")}>{active ? "● Live" : "Draft"}</span>
         {issues.length > 0 && <span className="hidden truncate text-xs text-amber-700 md:inline" title={issues.join("\n")}>⚠ {issues[0]}{issues.length > 1 ? ` (+${issues.length - 1})` : ""}</span>}
+        {dirty && <span className="text-xs text-slate-400">Unsaved changes</span>}
         <div className="ml-auto flex items-center gap-1.5">
           <HeaderBtn onClick={() => relayout()} title="Arrange as mind map"><Wand2 className="h-4 w-4" /> Arrange</HeaderBtn>
           <HeaderBtn active={showStats} onClick={() => setShowStats(!showStats)} title="Show counts on steps"><BarChart3 className="h-4 w-4" /> Stats</HeaderBtn>
           <HeaderBtn active={panel === "runs"} onClick={() => setPanel(panel === "runs" ? null : "runs")} title="Leads in this flow">Runs {stats ? `(${stats.totals.total ?? 0})` : ""}</HeaderBtn>
           {canEdit && <HeaderBtn active={panel === "test"} onClick={() => setPanel(panel === "test" ? null : "test")} title="Add leads to this flow"><UserPlus className="h-4 w-4" /> Add leads</HeaderBtn>}
+          <HeaderBtn active={panel === "checks"} onClick={() => setPanel(panel === "checks" ? null : "checks")} title="Things to check before going live">
+            <AlertTriangle className={clsx("h-4 w-4", checkCount ? "text-amber-600" : "")} /> Checks{checkCount ? ` (${checkCount})` : ""}
+          </HeaderBtn>
           <HeaderBtn active={panel === "settings"} onClick={() => setPanel(panel === "settings" ? null : "settings")} title="Flow settings"><Settings2 className="h-4 w-4" /></HeaderBtn>
           {canEdit && (
             <>
               <button onClick={() => save()} disabled={saving} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : dirty ? <Save className="h-4 w-4 text-amber-600" /> : <Check className="h-4 w-4 text-teal-600" />} Save
               </button>
-              <button onClick={() => save({ active: !active })} disabled={saving} className={clsx("h-8 rounded-lg px-3 text-sm font-semibold text-white", active ? "bg-slate-600 hover:bg-slate-700" : "bg-teal-600 hover:bg-teal-700")}>
+              <button onClick={() => (active ? save({ active: false }) : goLive())} disabled={saving} className={clsx("h-8 rounded-lg px-3 text-sm font-semibold text-white", active ? "bg-slate-600 hover:bg-slate-700" : "bg-teal-600 hover:bg-teal-700")}>
                 {active ? "Pause" : "Go live"}
               </button>
             </>
@@ -305,7 +357,7 @@ function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
 
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1">
-          <Ctx.Provider value={{ templates, stats: showStats ? stats?.nodes ?? null : null, connected, onAdd: (nodeId, handle, x, y) => canEdit && setAdder({ nodeId, handle, x, y }) }}>
+          <Ctx.Provider value={{ templates, stats: showStats ? stats?.nodes ?? null : null, connected, warned, onAdd: (nodeId, handle, x, y) => canEdit && setAdder({ nodeId, handle, x, y }) }}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -351,11 +403,27 @@ function Editor({ init, canEdit }: { init: FlowInit; canEdit: boolean }) {
             {panel === "settings" ? (
               <SettingsPanel settings={settings} canEdit={canEdit} onChange={(s) => { setSettings(s); mark(); }} onClose={() => setPanel(null)} />
             ) : panel === "runs" ? (
-              <RunsPanel stats={stats} nodes={nodes} onClose={() => setPanel(null)} onRefresh={() => api<Stats>(`/api/flows/${init.id}/stats`).then(setStats)} />
+              <RunsPanel stats={stats} nodes={nodes} onClose={() => setPanel(null)} onRefresh={loadStats} />
             ) : panel === "test" ? (
-              <EnrollPanel flowId={init.id} dirty={dirty} onClose={() => setPanel(null)} onDone={() => api<Stats>(`/api/flows/${init.id}/stats`).then(setStats)} />
+              <EnrollPanel flowId={init.id} dirty={dirty} active={active} onClose={() => setPanel(null)} onDone={loadStats} />
+            ) : panel === "checks" ? (
+              <ChecksPanel
+                issues={issues} warnings={warnings} rules={overlapRules} flows={overlapFlows} waConnected={waConnected} canEdit={canEdit} active={active} saving={saving}
+                onShow={(id) => { setPanel(null); setSelected(id); }}
+                onPauseRule={async (r) => {
+                  try {
+                    await api(`/api/automations/${r.id}`, { method: "PATCH", body: { active: false } });
+                    setRuleList((l) => l.filter((x) => x.id !== r.id));
+                    toast.success("Automation paused", `"${r.name}" is off. Turn it back on any time from Automations.`);
+                  } catch (e) {
+                    toast.error("Couldn't pause it", (e as Error).message);
+                  }
+                }}
+                onGoLive={() => goLive(true)}
+                onClose={() => setPanel(null)}
+              />
             ) : sel ? (
-              <NodePanel key={sel.id} node={sel} templates={templates} canEdit={canEdit} onChange={(d) => updateData(sel.id, d)} onDelete={() => deleteNode(sel.id)} onClose={() => setSelected(null)} />
+              <NodePanel key={sel.id} node={sel} templates={templates} canEdit={canEdit} warnings={warned.get(sel.id) ?? []} hasAny={connected.has(`${sel.id}:any`)} onChange={(d) => updateData(sel.id, d)} onRemoveOption={(i) => removeOption(sel.id, i)} onDelete={() => deleteNode(sel.id)} onClose={() => setSelected(null)} />
             ) : null}
           </aside>
         )}
@@ -420,13 +488,14 @@ function ConditionsEditor({ conds, onChange }: { conds: Condition[]; onChange: (
   );
 }
 
-function NodePanel({ node, templates, canEdit, onChange, onDelete, onClose }: { node: Node<FlowNodeData>; templates: Template[]; canEdit: boolean; onChange: (d: FlowNodeData) => void; onDelete: () => void; onClose: () => void }) {
+function NodePanel({ node, templates, canEdit, warnings, hasAny, onChange, onRemoveOption, onDelete, onClose }: { node: Node<FlowNodeData>; templates: Template[]; canEdit: boolean; warnings: string[]; hasAny: boolean; onChange: (d: FlowNodeData) => void; onRemoveOption: (i: number) => void; onDelete: () => void; onClose: () => void }) {
   const d = node.data;
   const meta = NODE_META[d.kind];
   return (
     <div>
       <PanelHead title={meta.label} color={meta.color} onClose={onClose} />
       <fieldset disabled={!canEdit} className="space-y-4 p-4 text-sm">
+        {warnings.map((w) => <p key={w} className="flex gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w}</p>)}
         {d.kind === "trigger" && (
           <>
             <label className="block">Start this flow when
@@ -448,14 +517,14 @@ function NodePanel({ node, templates, canEdit, onChange, onDelete, onClose }: { 
           <>
             <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-0.5 text-xs">
               <button type="button" onClick={() => onChange({ ...d, templateKey: null })} className={clsx("rounded-md py-1.5", !d.templateKey ? "bg-white font-semibold shadow-sm" : "text-slate-500")}>Write message</button>
-              <button type="button" onClick={() => onChange({ ...d, templateKey: templates.find((t) => t.active)?.key ?? null })} className={clsx("rounded-md py-1.5", d.templateKey ? "bg-white font-semibold shadow-sm" : "text-slate-500")}>Use template</button>
+              <button type="button" onClick={() => onChange({ ...d, templateKey: (templates.find((t) => t.active && t.metaTemplateName) ?? templates.find((t) => t.active))?.key ?? null })} className={clsx("rounded-md py-1.5", d.templateKey ? "bg-white font-semibold shadow-sm" : "text-slate-500")}>Use template</button>
             </div>
             {d.templateKey !== null ? (
               <label className="block">Template
                 <select value={d.templateKey} onChange={(e) => onChange({ ...d, templateKey: e.target.value })} className={`${inputCls} mt-1`}>
                   {templates.filter((t) => t.active).map((t) => <option key={t.key} value={t.key}>{t.name}{t.metaTemplateName ? " ✓ Meta approved" : ""}</option>)}
                 </select>
-                <span className="mt-1 block text-xs text-slate-500">Meta-approved templates can be sent anytime. Others only within 24 h of the customer&apos;s last message.</span>
+                <span className="mt-1 block text-xs text-slate-500">Meta-approved templates can be sent anytime. Others only within 24 h of the customer&apos;s last message. Manage templates in <Link href="/settings?tab=templates" className="text-teal-700 underline">Settings, WhatsApp templates</Link>.</span>
               </label>
             ) : (
               <label className="block">Message
@@ -463,7 +532,7 @@ function NodePanel({ node, templates, canEdit, onChange, onDelete, onClose }: { 
                 <div className="mt-1 flex flex-wrap gap-1">
                   {VAR_CHIPS.map((v) => <button type="button" key={v} onClick={() => onChange({ ...d, body: `${d.body}{{${v}}}` })} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-teal-50">{`{{${v}}}`}</button>)}
                 </div>
-                <span className="mt-1 block text-xs text-amber-700">Free text is delivered only within 24 h of the customer&apos;s last message. Use a Meta-approved template for the first message to a new lead.</span>
+                <span className="mt-1 block text-xs text-slate-500">Free text reaches the customer only within 24 h of their last message. To message a new or silent lead, use a Meta-approved template.</span>
               </label>
             )}
             <div>
@@ -489,11 +558,12 @@ function NodePanel({ node, templates, canEdit, onChange, onDelete, onClose }: { 
                 <div key={i} className="mb-1.5 flex items-center gap-1.5">
                   <span className="w-5 text-xs text-slate-400">{i + 1}.</span>
                   <input value={o} onChange={(e) => onChange({ ...d, options: d.options.map((x, j) => (j === i ? e.target.value : x)) })} className={inputCls} />
-                  <button type="button" onClick={() => onChange({ ...d, options: d.options.filter((_, j) => j !== i) })} className="text-slate-400 hover:text-red-600"><X className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => onRemoveOption(i)} className="text-slate-400 hover:text-red-600" title="Remove option and its branch"><X className="h-4 w-4" /></button>
                 </div>
               ))}
               {d.options.length < 10 && <button type="button" onClick={() => onChange({ ...d, options: [...d.options, ""] })} className="text-xs font-medium text-teal-700 hover:underline">+ Add option</button>}
               <p className="mt-1 text-xs text-slate-500">Matches the button tapped, the option text, or its number (&quot;1&quot;, &quot;2&quot;…). Anything else goes to <b>Any other reply</b>.</p>
+              {!hasAny && <p className="mt-1 text-xs text-slate-500">Nothing is connected to <b>Any other reply</b>, so an unexpected answer stops the flow and the salesperson is notified to reply personally.</p>}
             </div>
             <label className="block">If no reply within<div className="mt-1"><DurationInput minutes={d.timeoutMinutes} onChange={(m) => onChange({ ...d, timeoutMinutes: m })} /></div></label>
           </>
@@ -590,7 +660,78 @@ function SettingsPanel({ settings, canEdit, onChange, onClose }: { settings: Flo
   );
 }
 
+function ChecksPanel(p: {
+  issues: string[]; warnings: FlowWarning[]; rules: RuleRef[]; flows: FlowRef[]; waConnected: boolean; canEdit: boolean; active: boolean; saving: boolean;
+  onShow: (nodeId: string) => void; onPauseRule: (r: RuleRef) => void; onGoLive: () => void; onClose: () => void;
+}) {
+  const nothing = !p.issues.length && !p.warnings.length && !p.rules.length && !p.flows.length;
+  return (
+    <div>
+      <PanelHead title="Checks before going live" onClose={p.onClose} />
+      <div className="space-y-5 p-4 text-sm">
+        {nothing && <p className="rounded-lg bg-green-50 px-3 py-2 text-green-800">All good. Nothing to fix.</p>}
+        {p.issues.length > 0 && (
+          <section>
+            <h4 className="mb-1.5 font-semibold text-red-700">Fix before going live</h4>
+            <ul className="space-y-1.5">{p.issues.map((i) => <li key={i} className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">{i}</li>)}</ul>
+          </section>
+        )}
+        {p.warnings.length > 0 && (
+          <section>
+            <h4 className="mb-1 font-semibold text-amber-800">WhatsApp delivery</h4>
+            <p className="mb-2 text-xs text-slate-500">
+              {p.waConnected
+                ? "WhatsApp is connected, so these steps can fail for real customers until fixed."
+                : "You're in simulation mode, so nothing is really sent yet and the flow works for testing. Fix these before you connect WhatsApp Cloud."}
+            </p>
+            <ul className="space-y-1.5">
+              {p.warnings.map((w, i) => (
+                <li key={i} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {w.text}
+                  {w.nodeId && <button onClick={() => p.onShow(w.nodeId!)} className="ml-1 font-semibold text-teal-700 hover:underline">Show step</button>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {p.rules.length > 0 && (
+          <section>
+            <h4 className="mb-1 font-semibold text-slate-800">Automations that also message these leads</h4>
+            <ul className="space-y-2">
+              {p.rules.map((r) => (
+                <li key={r.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
+                  <div className="font-medium text-slate-800">{r.name}</div>
+                  <div className="text-slate-500">{TRIGGERS[r.trigger as keyof typeof TRIGGERS]?.label ?? r.trigger}</div>
+                  <p className="mt-1 text-slate-600">
+                    {FLOW_OWNED_TRIGGERS.includes(r.trigger)
+                      ? "No double messages: its WhatsApp message is skipped for leads this flow has just messaged. Its other actions, like call tasks, still run."
+                      : "This one is always sent (it carries details like a quotation link or visit time), so leads may get both messages."}
+                  </p>
+                  {p.canEdit && <button onClick={() => p.onPauseRule(r)} className="mt-1.5 rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-700 hover:bg-slate-50">Pause this automation</button>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {p.flows.length > 0 && (
+          <section>
+            <h4 className="mb-1 font-semibold text-slate-800">Other live flows with the same start</h4>
+            <p className="mb-1.5 text-xs text-slate-500">A lead who matches both will get both journeys. Add a condition on the Start step, or pause one of them.</p>
+            <ul className="space-y-1">{p.flows.map((f) => <li key={f.id}><Link href={`/nurture/flows/${f.id}`} className="text-xs font-medium text-teal-700 hover:underline">{f.name}</Link></li>)}</ul>
+          </section>
+        )}
+        {p.canEdit && !p.active && (
+          <button onClick={p.onGoLive} disabled={p.saving || p.issues.length > 0} className="w-full rounded-lg bg-teal-600 py-2 font-semibold text-white hover:bg-teal-700 disabled:opacity-40">
+            {nothing ? "Go live" : "Go live anyway"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const STATUS_STYLE: Record<string, string> = { ACTIVE: "bg-sky-100 text-sky-700", WAITING_REPLY: "bg-violet-100 text-violet-700", COMPLETED: "bg-green-100 text-green-700", STOPPED: "bg-amber-100 text-amber-700", FAILED: "bg-red-100 text-red-700" };
+const STATUS_LABEL: Record<string, string> = { ACTIVE: "in flow", WAITING_REPLY: "waiting for reply", COMPLETED: "completed", STOPPED: "stopped", FAILED: "failed" };
 
 function RunsPanel({ stats, nodes, onClose, onRefresh }: { stats: Stats | null; nodes: Node<FlowNodeData>[]; onClose: () => void; onRefresh: () => void }) {
   const t = stats?.totals ?? {};
@@ -610,7 +751,7 @@ function RunsPanel({ stats, nodes, onClose, onRefresh }: { stats: Stats | null; 
             <li key={r.id} className="px-2 py-2">
               <div className="flex items-center gap-2">
                 <Link href={`/leads/${r.lead.id}`} className="font-medium text-teal-700 hover:underline">{r.lead.name}</Link>
-                <span className={clsx("ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold", STATUS_STYLE[r.status])}>{r.status.replace("_", " ").toLowerCase()}</span>
+                <span className={clsx("ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold", STATUS_STYLE[r.status])}>{STATUS_LABEL[r.status] ?? r.status.toLowerCase()}</span>
               </div>
               <div className="text-xs text-slate-500">
                 {at ? `At: ${NODE_META[at.data.kind].label}` : r.stopReason ?? ""}
@@ -625,7 +766,7 @@ function RunsPanel({ stats, nodes, onClose, onRefresh }: { stats: Stats | null; 
   );
 }
 
-function EnrollPanel({ flowId, dirty, onClose, onDone }: { flowId: string; dirty: boolean; onClose: () => void; onDone: () => void }) {
+function EnrollPanel({ flowId, dirty, active, onClose, onDone }: { flowId: string; dirty: boolean; active: boolean; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<{ id: string; name: string; code: string; phone: string }[]>([]);
@@ -639,7 +780,7 @@ function EnrollPanel({ flowId, dirty, onClose, onDone }: { flowId: string; dirty
   const enroll = async () => {
     try {
       const r = await api<{ started: number; skipped: number }>(`/api/flows/${flowId}/enroll`, { body: { leadIds: [...picked] } });
-      toast.success(`${r.started} lead(s) added`, r.skipped ? `${r.skipped} skipped (already in flow or opted out)` : undefined);
+      toast.success(`${r.started} lead${r.started === 1 ? "" : "s"} added`, r.skipped ? `${r.skipped} skipped: already in this flow, or replied STOP` : "Open Runs to follow them.");
       setPicked(new Set());
       onDone();
     } catch (e) {
@@ -651,6 +792,7 @@ function EnrollPanel({ flowId, dirty, onClose, onDone }: { flowId: string; dirty
       <PanelHead title="Add leads to this flow" onClose={onClose} />
       <div className="space-y-3 p-4 text-sm">
         {dirty && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Save first. Leads run the last saved version.</p>}
+        {!active && <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">This flow is a draft. Leads you add here still go through it, which is handy for testing. Leads who replied STOP are skipped.</p>}
         <p className="text-xs text-slate-500">Tip: add yourself as a lead to test the journey on your own WhatsApp.</p>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, phone, code…" className={inputCls} />
         <ul className="max-h-[50vh] divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-100">

@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Your solar rooftop design", robots: { index: false, follow: false } };
 
 /** Customer-facing, read-only 3D design preview. Access by unguessable share token only. */
-export default async function PublicDesignPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function PublicDesignPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ embed?: string }> }) {
   const { token } = await params;
+  const embed = (await searchParams).embed === "1";
   if (!/^[A-Za-z0-9_-]{20,40}$/.test(token)) notFound();
   const d = await db.solarDesign.findUnique({
     where: { shareToken: token },
@@ -29,6 +30,8 @@ export default async function PublicDesignPage({ params }: { params: Promise<{ t
       customer={d.lead ? { name: d.lead.name, code: d.lead.code, segment: d.lead.segment, address } : null}
       org={d.organization}
       stats={{ systemKw: d.systemKw, panelCount: d.panelCount, shadingLossPct: d.shadingLossPct, annualKwh: d.annualKwh }}
+      embed={embed}
+      fullUrl={`/d/${token}`}
     />
   );
 }

@@ -21,6 +21,8 @@ const schema = z.object({
   pin: z.string().regex(/^\d{4,6}$/, "4-6 digit PIN").nullable().optional(),
   /** null = back to the role's defaults. */
   modules: z.array(z.enum(MODULE_KEYS as [string, ...string[]])).nullable().optional(),
+  /** Company-defined role (null = use the built-in role only). */
+  customRoleId: z.string().nullable().optional(),
 });
 
 /** Admins manage anyone; every user can edit their own name/phone/password. */
@@ -32,8 +34,13 @@ export const PATCH = route<{ id: string }>(null, async ({ req, session, params }
   const admin = can(session, "users:manage");
   if (!self && !admin) throw new ApiError(403, "You can only edit your own profile");
 
-  if ((body.role || body.active !== undefined || body.modules !== undefined) && !admin) throw new ApiError(403, "Only admins can change roles or access");
+  if ((body.role || body.active !== undefined || body.modules !== undefined || body.customRoleId !== undefined) && !admin) throw new ApiError(403, "Only admins can change roles or access");
   if (body.modules !== undefined && target.role === "OWNER") throw new ApiError(400, "The owner always has access to every module");
+  if (body.customRoleId && target.role === "OWNER") throw new ApiError(400, "The owner's role can't be changed");
+  const customRole = body.customRoleId ? await db.customRole.findFirst({ where: { id: body.customRoleId, organizationId: session.orgId } }) : null;
+  if (body.customRoleId && !customRole) throw new ApiError(400, "That role no longer exists");
+  // Picking a built-in role clears any custom role; picking a custom role sets the role it's based on.
+  const roleData = customRole ? { role: customRole.baseRole, customRoleId: customRole.id } : body.role ? { role: body.role, customRoleId: null } : body.customRoleId === null ? { customRoleId: null } : {};
   if (target.role === "OWNER" && (body.role && body.role !== "OWNER" || body.active === false)) throw new ApiError(400, "The owner account cannot be demoted or deactivated");
   if (body.role === "OWNER") throw new ApiError(400, "Ownership transfer is handled by support");
   if ((body.password || body.pin !== undefined) && self) {
@@ -46,7 +53,7 @@ export const PATCH = route<{ id: string }>(null, async ({ req, session, params }
     data: {
       name: body.name,
       phone: body.phone === undefined ? undefined : body.phone ? normalizePhone(body.phone) : null,
-      role: body.role,
+      ...roleData,
       territory: body.territory,
       active: body.active,
       modules: body.modules === undefined ? undefined : body.modules === null ? Prisma.DbNull : body.modules,

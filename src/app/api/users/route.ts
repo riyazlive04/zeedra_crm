@@ -15,7 +15,7 @@ export const GET = route(null, async ({ session }) =>
   db.user.findMany({
     where: { organizationId: session.orgId },
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true, modules: true },
+    select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true, modules: true, customRoleId: true },
   }),
 );
 
@@ -28,6 +28,8 @@ const createSchema = z.object({
   password: z.string().min(8).max(200),
   /** null / omitted = the role's default modules. */
   modules: z.array(z.enum(MODULE_KEYS as [string, ...string[]])).nullable().optional(),
+  /** A company-defined role; the user's built-in role becomes the one it's based on. */
+  customRoleId: z.string().nullable().optional(),
 });
 
 export const POST = route("users:manage", async ({ req, session }) => {
@@ -35,6 +37,8 @@ export const POST = route("users:manage", async ({ req, session }) => {
   if (await db.user.findUnique({ where: { email: body.email } })) throw new ApiError(409, "A user with this email already exists");
   const org = await db.organization.findUniqueOrThrow({ where: { id: session.orgId }, select: { plan: true, billingStatus: true, trialEndsAt: true } });
   const count = await db.user.count({ where: { organizationId: session.orgId, active: true } });
+  const customRole = body.customRoleId ? await db.customRole.findFirst({ where: { id: body.customRoleId, organizationId: session.orgId } }) : null;
+  if (body.customRoleId && !customRole) throw new ApiError(400, "That role no longer exists");
   if (seatLimitReached(org, count)) throw new ApiError(402, "You've reached your plan's team member limit. Upgrade in Settings → Billing to add more.");
   const user = await db.user.create({
     data: {
@@ -42,7 +46,8 @@ export const POST = route("users:manage", async ({ req, session }) => {
       name: body.name,
       email: body.email,
       phone: body.phone ? normalizePhone(body.phone) : null,
-      role: body.role,
+      role: customRole?.baseRole ?? body.role,
+      customRoleId: customRole?.id ?? null,
       territory: body.territory || null,
       modules: body.modules ?? undefined,
       passwordHash: await hashPassword(body.password),

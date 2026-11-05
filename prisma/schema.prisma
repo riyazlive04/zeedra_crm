@@ -56,6 +56,8 @@ model Organization {
   notifications Notification[]
   counters      Counter[]
   solarDesigns  SolarDesign[]
+  quotationTemplates QuotationTemplate[]
+  customRoles   CustomRole[]
   flows         Flow[]
   flowRuns      FlowRun[]
   broadcasts    Broadcast[]
@@ -83,8 +85,10 @@ model User {
   role           Role     @default(FIELD_SALES)
   active         Boolean  @default(true)
   territory      String?
-  /// Module keys this user can open (src/lib/modules.ts). null = the role's defaults.
+  /// Module keys this user can open (src/lib/modules.ts). null = their custom role's or built-in role's defaults.
   modules        Json?
+  /// Company-defined role (name + modules). `role` still holds the built-in role it works like.
+  customRoleId   String?
   avatarColor    String   @default("#f59e0b")
   // Google Calendar OAuth (per salesperson)
   googleEmail        String?
@@ -101,6 +105,7 @@ model User {
   updatedAt      DateTime @updatedAt
 
   organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customRole       CustomRole?   @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   assignedLeads    Lead[]        @relation("LeadAssignee")
   createdLeads     Lead[]        @relation("LeadCreator")
   appointments     Appointment[]
@@ -882,4 +887,42 @@ model Broadcast {
 
   @@index([status, scheduledAt])
   @@index([organizationId, createdAt])
+}
+
+// ─── Custom quotation templates ──────────────────────────────────────────
+
+/// An organisation's own quotation design (converted from their PDF), as HTML with {{placeholders}}
+/// filled by src/lib/quote-template.ts. At most one is active; quotations remember the template
+/// they were created with (QuotifySnapshot.templateId).
+model QuotationTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  html           String
+  sourceFileName String?
+  active         Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, active])
+}
+
+/// A role a company defines for itself (e.g. "Site Engineer"): a name, the built-in role it works
+/// like (decides data scope: all leads vs. own leads, and trusted actions), and the modules it opens.
+model CustomRole {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  baseRole       Role
+  modules        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users        User[]
+
+  @@unique([organizationId, name])
 }

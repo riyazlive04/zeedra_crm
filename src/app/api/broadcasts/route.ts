@@ -3,10 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { route, parseBody } from "@/lib/api";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
-import { audienceWhere, runNurture } from "@/lib/nurture/engine";
+import { audienceWhere, parseGraph, runNurture } from "@/lib/nurture/engine";
+import { validateFlow } from "@/lib/nurture/types";
 import { audienceSchema } from "@/lib/nurture/schema";
-
-
 
 export const GET = route(null, async ({ session }) => {
   const list = await db.broadcast.findMany({ where: { organizationId: session.orgId }, orderBy: { createdAt: "desc" }, take: 100, omit: { queue: true } });
@@ -31,7 +30,12 @@ export const POST = route("automations:manage", async ({ req, session }) => {
   if (!input.templateKey === !input.flowId) throw new ApiError(400, "Choose either a template or a flow");
   if (input.templateKey && !(await db.messageTemplate.findFirst({ where: { organizationId: session.orgId, key: input.templateKey, active: true } })))
     throw new ApiError(400, "Template not found or inactive");
-  if (input.flowId && !(await db.flow.findFirst({ where: { organizationId: session.orgId, id: input.flowId } }))) throw new ApiError(400, "Flow not found");
+  if (input.flowId) {
+    const flow = await db.flow.findFirst({ where: { organizationId: session.orgId, id: input.flowId } });
+    if (!flow) throw new ApiError(400, "Flow not found");
+    const issues = validateFlow(parseGraph(flow.graph));
+    if (issues.length) throw new ApiError(400, `Fix the flow before broadcasting it: ${issues.join("; ")}`);
+  }
   const total = await db.lead.count({ where: audienceWhere(session.orgId, input.audience) });
   if (!total) throw new ApiError(400, "No opted-in leads match this audience");
   const when = input.scheduledAt ? new Date(input.scheduledAt) : new Date();

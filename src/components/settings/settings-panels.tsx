@@ -516,22 +516,38 @@ export interface TeamUser {
   avatarColor: string;
   googleEmail: string | null;
   lastLoginAt: string | null;
-  /** Custom module access; null = role defaults. */
+  /** Personal module override; null = their role's modules. */
   modules: string[] | null;
+  customRoleId: string | null;
 }
 
-/** Tick-box grid of modules. `value` null means "follow the role's defaults". */
-function ModuleAccess({ role, value, onChange }: { role: string; value: string[] | null; onChange: (v: string[] | null) => void }) {
-  const defaults = defaultModules(role as RoleName);
+export interface TeamRole {
+  id: string;
+  name: string;
+  baseRole: string;
+  modules: string[];
+  userCount: number;
+}
+
+const BASE_ROLE_HELP: Record<string, string> = {
+  ADMIN: "Sees everything and can change settings",
+  SALES_MANAGER: "Sees all leads, approves quotations, assigns work",
+  TELECALLER: "Sees all leads, calls and books visits",
+  FIELD_SALES: "Sees only their own leads, visits and quotes",
+  INSTALLER: "Sees only the installations given to them",
+};
+
+/** Tick-box grid of modules. `value` null means "follow the defaults" (built-in or company role). */
+function ModuleAccess({ defaults, defaultsLabel, value, onChange, allowReset = true }: { defaults: string[]; defaultsLabel: string; value: string[] | null; onChange: (v: string[] | null) => void; allowReset?: boolean }) {
   const current = value ?? defaults;
   const toggle = (k: string) => onChange(current.includes(k) ? current.filter((x) => x !== k) : [...current, k]);
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs text-slate-500">{value === null ? `Using the ${ROLE_LABEL[role as keyof typeof ROLE_LABEL] ?? role} defaults` : "Custom access"}</span>
+        <span className="text-xs text-slate-500">{value === null ? `Using the ${defaultsLabel} defaults` : "Custom access"}</span>
         <div className="flex gap-2 text-xs">
           <button type="button" onClick={() => onChange(MODULES.map((m) => m.key))} className="font-medium text-sun-700 hover:underline">Select all</button>
-          {value !== null && <button type="button" onClick={() => onChange(null)} className="font-medium text-slate-500 hover:underline">Reset to role defaults</button>}
+          {allowReset && value !== null && <button type="button" onClick={() => onChange(null)} className="font-medium text-slate-500 hover:underline">Reset to role defaults</button>}
         </div>
       </div>
       <div className="grid gap-1.5 sm:grid-cols-2">
@@ -545,83 +561,152 @@ function ModuleAccess({ role, value, onChange }: { role: string; value: string[]
           </label>
         ))}
       </div>
-      <p className="mt-2 text-[11px] text-slate-400">Profile and Help are always available. Whether someone sees every lead or only their own still follows their role.</p>
+      <p className="mt-2 text-[11px] text-slate-400">Profile and Help are always available. Whether someone sees every lead or only their own follows the role it&apos;s based on.</p>
     </div>
   );
 }
 
-export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
+/** Role picker value: a built-in role key, or "custom:<id>" for a company-defined role. */
+function RoleSelect({ value, roles, onChange, className }: { value: string; roles: TeamRole[]; onChange: (v: string) => void; className?: string }) {
+  return (
+    <select className={className ?? "input"} value={value} onChange={(e) => onChange(e.target.value)}>
+      <optgroup label="Built-in roles">
+        {ROLES.filter((r) => r !== "OWNER").map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+      </optgroup>
+      {roles.length > 0 && (
+        <optgroup label="Your roles">
+          {roles.map((r) => <option key={r.id} value={`custom:${r.id}`}>{r.name}</option>)}
+        </optgroup>
+      )}
+    </select>
+  );
+}
+
+export function TeamPanel({ users, me, roles }: { users: TeamUser[]; me: string; roles: TeamRole[] }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", role: "FIELD_SALES", territory: "", password: "" });
   const [newModules, setNewModules] = useState<string[] | null>(null);
   const [editing, setEditing] = useState<TeamUser | null>(null);
   const [editModules, setEditModules] = useState<string[] | null>(null);
+  const [roleEdit, setRoleEdit] = useState<{ id: string | null; name: string; baseRole: string; modules: string[] } | null>(null);
   const { save, busy } = useSaver();
+  const roleById = (id: string | null) => roles.find((r) => r.id === id) ?? null;
+  // Defaults a person gets without a personal override: their company role's modules, else the built-in role's.
+  const defaultsFor = (role: string, customRoleId: string | null) => {
+    const cr = roleById(customRoleId);
+    return cr ? { list: cr.modules, label: cr.name } : { list: defaultModules(role as RoleName), label: ROLE_LABEL[role as keyof typeof ROLE_LABEL] ?? role };
+  };
+  const newSel = f.role.startsWith("custom:") ? roleById(f.role.slice(7)) : null;
+  const newDefaults = newSel ? { list: newSel.modules, label: newSel.name } : defaultsFor(f.role, null);
+
   return (
-    <Card>
-      <CardHeader title="Team" subtitle={`${users.filter((u) => u.active).length} active users`} action={<Button size="sm" variant="primary" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Add user</Button>} />
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="table-head">
-            <tr>
-              <th className="px-5 py-2">User</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Modules</th>
-              <th className="px-3 py-2">Territory</th>
-              <th className="px-3 py-2">Google Calendar</th>
-              <th className="px-3 py-2">Last login</th>
-              <th className="px-5 py-2 text-right">Access</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {users.map((u) => (
-              <tr key={u.id} className={clsx(!u.active && "opacity-50")}>
-                <td className="px-5 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar name={u.name} color={u.avatarColor} size={28} />
-                    <div>
-                      <div className="font-medium">{u.name}</div>
-                      <div className="text-xs text-slate-500">{u.email}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-2.5">
-                  {u.role === "OWNER" || u.id === me ? (
-                    <Badge tone="violet">{ROLE_LABEL[u.role as keyof typeof ROLE_LABEL]}</Badge>
-                  ) : (
-                    <select className="input h-8 w-auto py-0 text-xs" defaultValue={u.role} onChange={(e) => save({ role: e.target.value }, "Role updated", `/api/users/${u.id}`)}>
-                      {ROLES.filter((r) => r !== "OWNER").map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_LABEL[r]}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-xs">
-                  {u.role === "OWNER" ? (
-                    <span className="text-slate-500">All modules</span>
-                  ) : (
-                    <button type="button" onClick={() => { setEditing(u); setEditModules(u.modules); }} className="rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-700 hover:border-sun-400 hover:bg-sun-50">
-                      {u.modules ? `Custom · ${u.modules.length}` : `Role default · ${defaultModules(u.role as RoleName).length}`} <span className="text-sun-700">Edit</span>
-                    </button>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-slate-600">{u.territory ?? "-"}</td>
-                <td className="px-3 py-2.5 text-xs">{u.googleEmail ? <span className="text-emerald-700">✓ {u.googleEmail}</span> : <span className="text-slate-400">Not connected</span>}</td>
-                <td className="px-3 py-2.5 text-xs text-slate-500">{u.lastLoginAt ? <TimeAgo date={u.lastLoginAt} /> : "Never"}</td>
-                <td className="px-5 py-2.5 text-right">
-                  {u.role !== "OWNER" && u.id !== me && (
-                    <Button size="xs" variant={u.active ? "ghost" : "secondary"} onClick={() => save({ active: !u.active }, u.active ? "User deactivated. Their open leads went back to the pool" : "User re-activated", `/api/users/${u.id}`)}>
-                      {u.active ? "Deactivate" : "Activate"}
-                    </Button>
-                  )}
-                </td>
+    <div className="space-y-5">
+      <Card>
+        <CardHeader title="Team" subtitle={`${users.filter((u) => u.active).length} active users`} action={<Button size="sm" variant="primary" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Add user</Button>} />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="table-head">
+              <tr>
+                <th className="px-5 py-2">User</th>
+                <th className="px-3 py-2">Role</th>
+                <th className="px-3 py-2">Modules</th>
+                <th className="px-3 py-2">Territory</th>
+                <th className="px-3 py-2">Google Calendar</th>
+                <th className="px-3 py-2">Last login</th>
+                <th className="px-5 py-2 text-right">Access</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {users.map((u) => {
+                const d = defaultsFor(u.role, u.customRoleId);
+                return (
+                  <tr key={u.id} className={clsx(!u.active && "opacity-50")}>
+                    <td className="px-5 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={u.name} color={u.avatarColor} size={28} />
+                        <div>
+                          <div className="font-medium">{u.name}</div>
+                          <div className="text-xs text-slate-500">{u.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {u.role === "OWNER" || u.id === me ? (
+                        <Badge tone="violet">{roleById(u.customRoleId)?.name ?? ROLE_LABEL[u.role as keyof typeof ROLE_LABEL]}</Badge>
+                      ) : (
+                        <RoleSelect
+                          className="input h-8 w-auto py-0 text-xs"
+                          value={u.customRoleId && roleById(u.customRoleId) ? `custom:${u.customRoleId}` : u.role}
+                          roles={roles}
+                          onChange={(v) => save(v.startsWith("custom:") ? { customRoleId: v.slice(7) } : { role: v }, "Role updated", `/api/users/${u.id}`)}
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs">
+                      {u.role === "OWNER" ? (
+                        <span className="text-slate-500">All modules</span>
+                      ) : (
+                        <button type="button" onClick={() => { setEditing(u); setEditModules(u.modules); }} className="rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-700 hover:border-sun-400 hover:bg-sun-50">
+                          {u.modules ? `Custom · ${u.modules.length}` : `Role default · ${d.list.length}`} <span className="text-sun-700">Edit</span>
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-slate-600">{u.territory ?? "-"}</td>
+                    <td className="px-3 py-2.5 text-xs">{u.googleEmail ? <span className="text-emerald-700">✓ {u.googleEmail}</span> : <span className="text-slate-400">Not connected</span>}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-500">{u.lastLoginAt ? <TimeAgo date={u.lastLoginAt} /> : "Never"}</td>
+                    <td className="px-5 py-2.5 text-right">
+                      {u.role !== "OWNER" && u.id !== me && (
+                        <Button size="xs" variant={u.active ? "ghost" : "secondary"} onClick={() => save({ active: !u.active }, u.active ? "User deactivated. Their open leads went back to the pool" : "User re-activated", `/api/users/${u.id}`)}>
+                          {u.active ? "Deactivate" : "Activate"}
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Roles"
+          subtitle="Create roles that match how your company works, like Site Engineer or Senior Telecaller."
+          action={<Button size="sm" onClick={() => setRoleEdit({ id: null, name: "", baseRole: "FIELD_SALES", modules: defaultModules("FIELD_SALES") })}><Plus className="h-4 w-4" /> Create role</Button>}
+        />
+        {roles.length === 0 ? (
+          <p className="px-5 pb-5 text-sm text-slate-500">No company roles yet. Everyone uses the built-in roles (Admin, Sales Manager, Tele-caller, Field Sales, Installer).</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="table-head">
+              <tr><th className="px-5 py-2">Role</th><th className="px-3 py-2">Works like</th><th className="px-3 py-2">Modules</th><th className="px-3 py-2">People</th><th className="px-5 py-2" /></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {roles.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-5 py-2.5 font-medium">{r.name}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-600">{ROLE_LABEL[r.baseRole as keyof typeof ROLE_LABEL]}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-600">{r.modules.length} of {MODULES.length}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-600">{r.userCount}</td>
+                  <td className="px-5 py-2.5 text-right">
+                    <Button size="xs" variant="ghost" onClick={() => setRoleEdit({ id: r.id, name: r.name, baseRole: r.baseRole, modules: r.modules })}>Edit</Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="text-rose-600"
+                      onClick={() => confirm(`Delete the role "${r.name}"? ${r.userCount ? `${r.userCount} people will go back to the built-in ${ROLE_LABEL[r.baseRole as keyof typeof ROLE_LABEL]} role.` : ""}`) && save(undefined, "Role deleted", `/api/roles/${r.id}`, "DELETE")}
+                    >
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -634,7 +719,8 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
               variant="primary"
               loading={busy}
               onClick={async () => {
-                if (await save({ ...f, phone: f.phone || undefined, territory: f.territory || undefined, modules: newModules }, "User added", "/api/users", "POST")) {
+                const roleBody = newSel ? { role: newSel.baseRole, customRoleId: newSel.id } : { role: f.role };
+                if (await save({ ...f, ...roleBody, phone: f.phone || undefined, territory: f.territory || undefined, modules: newModules }, "User added", "/api/users", "POST")) {
                   setOpen(false);
                   setF({ name: "", email: "", phone: "", role: "FIELD_SALES", territory: "", password: "" });
                   setNewModules(null);
@@ -657,13 +743,7 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
             <input className="input" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
           </Field>
           <Field label="Role">
-            <select className="input" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>
-              {ROLES.filter((r) => r !== "OWNER").map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            </select>
+            <RoleSelect value={f.role} roles={roles} onChange={(v) => { setF({ ...f, role: v }); setNewModules(null); }} />
           </Field>
           <Field label="Territory">
             <input className="input" value={f.territory} onChange={(e) => setF({ ...f, territory: e.target.value })} placeholder="e.g. South Chennai" />
@@ -674,9 +754,10 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
         </div>
         <div className="mt-4 border-t border-slate-100 pt-4">
           <div className="mb-2 text-sm font-semibold text-slate-800">Module access</div>
-          <ModuleAccess role={f.role} value={newModules} onChange={setNewModules} />
+          <ModuleAccess defaults={newDefaults.list} defaultsLabel={newDefaults.label} value={newModules} onChange={setNewModules} />
         </div>
       </Modal>
+
       <Modal
         open={!!editing}
         onClose={() => setEditing(null)}
@@ -698,9 +779,62 @@ export function TeamPanel({ users, me }: { users: TeamUser[]; me: string }) {
           </>
         }
       >
-        {editing && <ModuleAccess role={editing.role} value={editModules} onChange={setEditModules} />}
+        {editing && (() => {
+          const d = defaultsFor(editing.role, editing.customRoleId);
+          return <ModuleAccess defaults={d.list} defaultsLabel={d.label} value={editModules} onChange={setEditModules} />;
+        })()}
       </Modal>
-    </Card>
+
+      <Modal
+        open={!!roleEdit}
+        onClose={() => setRoleEdit(null)}
+        size="lg"
+        title={roleEdit?.id ? `Edit role · ${roleEdit.name}` : "Create role"}
+        subtitle="Everyone with this role gets these modules. Changes apply on their next page load."
+        footer={
+          <>
+            <Button onClick={() => setRoleEdit(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={busy}
+              onClick={async () => {
+                if (!roleEdit) return;
+                const body = { name: roleEdit.name, baseRole: roleEdit.baseRole, modules: roleEdit.modules };
+                const ok = roleEdit.id ? await save(body, "Role saved", `/api/roles/${roleEdit.id}`, "PATCH") : await save(body, "Role created", "/api/roles", "POST");
+                if (ok) setRoleEdit(null);
+              }}
+            >
+              {roleEdit?.id ? "Save role" : "Create role"}
+            </Button>
+          </>
+        }
+      >
+        {roleEdit && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Role name">
+                <input className="input" value={roleEdit.name} onChange={(e) => setRoleEdit({ ...roleEdit, name: e.target.value })} placeholder="e.g. Site Engineer" />
+              </Field>
+              <Field label="Works like" hint={BASE_ROLE_HELP[roleEdit.baseRole]}>
+                <select className="input" value={roleEdit.baseRole} onChange={(e) => setRoleEdit({ ...roleEdit, baseRole: e.target.value })}>
+                  {ROLES.filter((r) => r !== "OWNER").map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div className="border-t border-slate-100 pt-4">
+              <div className="mb-2 text-sm font-semibold text-slate-800">Modules for this role</div>
+              <ModuleAccess
+                defaults={roleEdit.modules}
+                defaultsLabel={roleEdit.name || "new role"}
+                value={roleEdit.modules}
+                allowReset={false}
+                onChange={(v) => setRoleEdit({ ...roleEdit, modules: v ?? [] })}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
   );
 }
 

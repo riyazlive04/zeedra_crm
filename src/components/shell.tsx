@@ -83,11 +83,18 @@ export function AppShell({
   }, []);
 
   // Poll unread count every 60s so new lead / hot-lead alerts surface without reload.
+  // Skipped while the tab is in the background (saves server/database work); refreshed on return.
   useEffect(() => {
-    const t = setInterval(() => {
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
       api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {});
-    }, 60_000);
-    return () => clearInterval(t);
+    };
+    const t = setInterval(poll, 60_000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", poll);
+    };
   }, []);
 
   async function openNotifs() {

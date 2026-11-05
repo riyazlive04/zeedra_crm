@@ -193,3 +193,59 @@ export async function aiDailyBrief(stats: Record<string, unknown>) {
     `Write today's sales brief for the solar company owner from these CRM numbers. 4-6 short bullet points ("- " prefix): what's going well, what needs attention (stale hot leads, unverified quotations, no-shows), and 2 concrete actions for today. No preamble.\n\n<stats>\n${JSON.stringify(stats, null, 2)}\n</stats>`,
   );
 }
+
+// ─── Quotation template from PDF ─────────────────────────────────────────
+
+const TEMPLATE_SYSTEM = `You convert a company's existing solar quotation PDF into a reusable HTML template for a CRM.
+The template must look like the original document when printed on A4, but every customer- or quote-specific value
+is replaced by a placeholder, so the CRM can fill it for each new customer.`;
+
+/**
+ * Rebuilds an uploaded quotation PDF as a self-contained HTML template with {{placeholders}}.
+ * Streams (the HTML can be long) and returns the raw HTML document. Caller sanitises it.
+ */
+export async function aiQuotationTemplateFromPdf(pdfBase64: string, fields: { key: string; label: string }[], itemFields: { key: string; label: string }[], paymentFields: string[]): Promise<string> {
+  const instructions = `Rebuild this quotation as ONE complete HTML document (<!DOCTYPE html> … </html>) that looks as close as possible to the PDF: same sections and order, headings, tables, colours, fonts (use similar web-safe fonts), spacing, borders and page breaks.
+
+Rules:
+- Put all CSS in a single <style> tag in <head>. Size pages for A4 print: use @page { size: A4; margin: 12mm } and wrap each original page in <section class="page"> with "page-break-after: always" (except the last).
+- No <script>, no event handlers, no external fonts or stylesheets, no forms.
+- Replace every value that belongs to this specific customer or quote with a placeholder in double curly braces. Use ONLY these placeholders:
+${fields.map((f) => `  {{${f.key}}} = ${f.label}`).join("\n")}
+- The table of items/line items must become a loop, keeping the original columns:
+  {{#each items}} … one table row … {{/each}}
+  inside the loop use: ${itemFields.map((f) => `{{${f.key}}} (${f.label})`).join(", ")}.
+- If there is a payment schedule/terms table, make it a loop: {{#each payments}} … {{/each}} using {{${paymentFields.join("}}, {{")}}}.
+- Optional sections (e.g. subsidy, logo) can be wrapped in {{#if path}} … {{/if}}. For the logo use <img src="{{company.logoUrl}}"> inside {{#if company.logoUrl}} … {{/if}}.
+- Keep fixed company text (terms & conditions, warranty text, scope of work, about us, bank instructions) as plain text exactly as written in the PDF.
+- Images you can't reproduce (photos, stamps, signatures): leave a neat empty box of the same size with a light border.
+- Amounts in placeholders are already formatted (e.g. ₹1,88,025), so don't add a ₹ sign before them.
+
+Return only the HTML document, with no explanation and no markdown fences.`;
+
+  const stream = getClient().beta.messages.stream({
+    model: MODEL,
+    max_tokens: 64000,
+    system: TEMPLATE_SYSTEM,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    thinking: { type: "adaptive" },
+    output_config: { effort: "high" },
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
+          { type: "text", text: instructions },
+        ],
+      },
+    ],
+  });
+  const res = await stream.finalMessage();
+  if (res.stop_reason === "refusal") throw new Error("The AI couldn't convert this PDF. Try a different file.");
+  if (res.stop_reason === "max_tokens") throw new Error("This quotation is too long to convert in one go. Try a shorter PDF (fewer pages).");
+  let html = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("").trim();
+  html = html.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "").trim();
+  if (!/<html[\s>]/i.test(html) && !/<body[\s>]/i.test(html)) throw new Error("The conversion didn't return a usable page. Please try again.");
+  return html;
+}

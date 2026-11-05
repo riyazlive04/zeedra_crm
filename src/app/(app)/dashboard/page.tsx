@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { Avatar, Card, CardHeader, EmptyState, PageHeader, StatCard, ButtonLink } from "@/components/ui";
 import { TemperatureBadge, STAGE_LABEL } from "@/components/badges";
-import { LeadTrendChart, HBarChart } from "@/components/charts";
+import { LeadTrendChart, HBarChart } from "@/components/charts-lazy";
 import { AiBrief } from "@/components/ai-brief";
 import { formatINRCompact, humanize } from "@/lib/text";
 

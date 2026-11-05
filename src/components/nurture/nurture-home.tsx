@@ -31,12 +31,13 @@ export function ConnectWhatsAppBanner({ compact }: { compact?: boolean }) {
 
 export function NurtureHome({ initialTab, connected, canEdit, flows, templates, analytics }: { initialTab: "flows" | "broadcasts" | "analytics"; connected: boolean; canEdit: boolean; flows: FlowRow[]; templates: Template[]; analytics: Analytics }) {
   const [tab, setTab] = useState(initialTab);
+  const router = useRouter();
   return (
     <div className="space-y-4">
       {!connected && <ConnectWhatsAppBanner />}
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1 text-sm">
         {([["flows", "Flows", GitFork], ["broadcasts", "Broadcasts", Megaphone], ["analytics", "Analytics", BarChart3]] as const).map(([k, l, Icon]) => (
-          <button key={k} onClick={() => { setTab(k); window.history.replaceState(null, "", `/nurture?tab=${k}`); }} className={clsx("flex flex-1 items-center justify-center gap-2 rounded-lg py-2 font-medium", tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+          <button key={k} onClick={() => { setTab(k); window.history.replaceState(null, "", `/nurture?tab=${k}`); router.refresh(); }} className={clsx("flex flex-1 items-center justify-center gap-2 rounded-lg py-2 font-medium", tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
             <Icon className="h-4 w-4" /> {l}
           </button>
         ))}
@@ -63,9 +64,14 @@ function FlowsTab({ flows, canEdit }: { flows: FlowRow[]; canEdit: boolean }) {
     }
   };
   const remove = async (f: FlowRow) => {
-    if (!confirm(`Delete flow "${f.name}"? Leads currently in it will stop.`)) return;
-    await api(`/api/flows/${f.id}`, { method: "DELETE" });
-    router.refresh();
+    if (!confirm(`Delete flow "${f.name}"? Leads currently in it will stop and its stats are removed.`)) return;
+    try {
+      await api(`/api/flows/${f.id}`, { method: "DELETE" });
+      toast.success("Flow deleted");
+      router.refresh();
+    } catch (e) {
+      toast.error("Couldn't delete", (e as Error).message);
+    }
   };
   return (
     <div className="space-y-5">
@@ -88,7 +94,7 @@ function FlowsTab({ flows, canEdit }: { flows: FlowRow[]; canEdit: boolean }) {
       )}
       <Card className="overflow-hidden p-0">
         {flows.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-500"><GitFork className="mx-auto mb-2 h-8 w-8 text-slate-300" />No flows yet. Pick a recipe above to get started.</div>
+          <div className="p-10 text-center text-sm text-slate-500"><GitFork className="mx-auto mb-2 h-8 w-8 text-slate-300" />No flows yet. Pick a recipe above to get started. It opens as a draft, so nothing is sent until you press Go live.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
@@ -130,13 +136,30 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
   const [templateKey, setTemplateKey] = useState(templates[0]?.key ?? "");
   const [flowId, setFlowId] = useState(flows[0]?.id ?? "");
   const [audience, setAudience] = useState<Audience>({ stage: [], temperature: [], segment: [], source: [], city: "", minBill: null });
-  const [preview, setPreview] = useState<{ count: number; sample: { name: string; code: string }[] } | null>(null);
+  const [preview, setPreview] = useState<{ count: number; optedOut: number; sample: { name: string; code: string }[] } | null>(null);
   const [when, setWhen] = useState("");
   const [sending, setSending] = useState(false);
   const load = () => api<BroadcastRow[]>("/api/broadcasts").then(setList).catch(() => setList([]));
   useEffect(() => { load(); }, []);
+  // While something is scheduled or sending, keep the progress and delivery counts fresh.
+  const busy = !!list?.some((b) => b.status === "SCHEDULED" || b.status === "SENDING");
   useEffect(() => {
-    const t = setTimeout(() => api<{ count: number; sample: { name: string; code: string }[] }>("/api/broadcasts/preview", { body: audience }).then(setPreview).catch(() => {}), 300);
+    if (!busy) return;
+    const t = setInterval(load, 10_000);
+    return () => clearInterval(t);
+  }, [busy]);
+  const cancel = async (b: BroadcastRow) => {
+    if (!confirm(`Cancel "${b.name}"? Messages already sent stay sent.`)) return;
+    try {
+      await api(`/api/broadcasts/${b.id}`, { method: "DELETE" });
+      toast.success("Broadcast cancelled");
+    } catch (e) {
+      toast.error("Couldn't cancel", (e as Error).message);
+    }
+    load();
+  };
+  useEffect(() => {
+    const t = setTimeout(() => api<{ count: number; optedOut: number; sample: { name: string; code: string }[] }>("/api/broadcasts/preview", { body: audience }).then(setPreview).catch(() => {}), 300);
     return () => clearTimeout(t);
   }, [audience]);
   const toggle = (k: keyof Audience, v: string) => {
@@ -146,14 +169,21 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
   const send = async () => {
     if (!name.trim()) return toast.error("Give the broadcast a name");
     if (!preview?.count) return toast.error("No opted-in leads match this audience");
+    if (mode === "template" && !templateKey) return toast.error("Pick a template to send");
+    if (mode === "flow" && !flowId) return toast.error("Pick a flow to start");
+    if (when && new Date(when).getTime() < Date.now() - 60_000) return toast.error("That time has already passed", "Pick a future time, or clear it to send now.");
     if (!confirm(`Send to ${preview.count} lead(s)${when ? ` on ${new Date(when).toLocaleString("en-IN")}` : " now"}?`)) return;
     setSending(true);
     try {
-      await api("/api/broadcasts", {
+      const r = await api<{ total: number }>("/api/broadcasts", {
         body: { name, templateKey: mode === "template" ? templateKey : null, flowId: mode === "flow" ? flowId : null, audience: { ...audience, minBill: audience.minBill || null }, scheduledAt: when ? new Date(when).toISOString() : null },
       });
-      toast.success(when ? "Broadcast scheduled" : "Broadcast sending");
+      toast.success(
+        when ? "Broadcast scheduled" : "Broadcast sending",
+        when ? `It goes to ${r.total} lead${r.total === 1 ? "" : "s"} on ${new Date(when).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}.` : `Going to ${r.total} lead${r.total === 1 ? "" : "s"}, 150 at a time. Progress updates below.`,
+      );
       setName("");
+      setWhen("");
       load();
     } catch (e) {
       toast.error("Couldn't send", (e as Error).message);
@@ -182,7 +212,7 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
             </div>
           ) : (
             <select value={flowId} onChange={(e) => setFlowId(e.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2">
-              {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              {flows.map((f) => <option key={f.id} value={f.id}>{f.name}{f.active ? "" : " (draft)"}</option>)}
             </select>
           )}
           <div className="space-y-2">
@@ -203,7 +233,8 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
               <input type="number" value={audience.minBill ?? ""} onChange={(e) => setAudience({ ...audience, minBill: e.target.value ? Number(e.target.value) : null })} placeholder="Min bill ₹" className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
             </div>
             <div className="rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-800">
-              <Users className="mr-1 inline h-3.5 w-3.5" /><b>{preview?.count ?? "…"}</b> lead(s){preview?.sample.length ? `, e.g. ${preview.sample.map((s) => s.name).join(", ")}` : ""}
+              <Users className="mr-1 inline h-3.5 w-3.5" /><b>{preview?.count ?? "…"}</b> lead{preview?.count === 1 ? "" : "s"}{preview?.sample.length ? `, e.g. ${preview.sample.map((s) => s.name).join(", ")}` : ""}
+              {preview?.optedOut ? <span className="block text-teal-700/80">{preview.optedOut} more match but replied STOP, so they're left out.</span> : null}
             </div>
           </div>
           <label className="block text-xs text-slate-500">Schedule (leave empty to send now)
@@ -219,7 +250,7 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
         {list === null ? (
           <div className="p-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-400" /></div>
         ) : list.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-500"><Megaphone className="mx-auto mb-2 h-8 w-8 text-slate-300" />No broadcasts yet.</div>
+          <div className="p-10 text-center text-sm text-slate-500"><Megaphone className="mx-auto mb-2 h-8 w-8 text-slate-300" />No broadcasts yet. Send a template or start a flow for a group of leads, for example all warm leads in one city.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
@@ -228,7 +259,7 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
             <tbody className="divide-y divide-slate-100">
               {list.map((b) => (
                 <tr key={b.id}>
-                  <td className="px-4 py-3"><div className="font-medium">{b.name}</div><div className="text-xs text-slate-400">{b.flowId ? "Starts a flow" : b.templateKey} · {new Date(b.scheduledAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</div></td>
+                  <td className="px-4 py-3"><div className="font-medium">{b.name}</div><div className="text-xs text-slate-400">{b.flowId ? `Starts flow: ${flows.find((f) => f.id === b.flowId)?.name ?? "deleted flow"}` : templates.find((t) => t.key === b.templateKey)?.name ?? b.templateKey} · {new Date(b.scheduledAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</div></td>
                   <td className="px-3 py-3"><span className={clsx("rounded-full px-2 py-0.5 text-xs font-semibold", b.status === "SENT" ? "bg-green-100 text-green-700" : b.status === "CANCELLED" ? "bg-slate-100 text-slate-500" : "bg-sky-100 text-sky-700")}>{b.status.toLowerCase()}{b.status === "SENDING" ? ` ${b.processed}/${b.total}` : ""}</span></td>
                   <td className="px-3 py-3 text-right">{b.total}</td>
                   <td className="px-3 py-3 text-right">{b.flowId ? b.processed : b.delivery.sent}</td>
@@ -237,7 +268,7 @@ function BroadcastsTab({ canEdit, templates, flows }: { canEdit: boolean; templa
                   <td className="px-3 py-3 text-right">{b.failed + (b.flowId ? 0 : b.delivery.failed)}</td>
                   <td className="px-3 py-3 text-right">
                     {canEdit && (b.status === "SCHEDULED" || b.status === "SENDING") && (
-                      <button onClick={async () => { await api(`/api/broadcasts/${b.id}`, { method: "DELETE" }); load(); }} className="text-xs text-red-600 hover:underline">Cancel</button>
+                      <button onClick={() => cancel(b)} className="text-xs text-red-600 hover:underline">Cancel</button>
                     )}
                   </td>
                 </tr>

@@ -6,7 +6,7 @@ import { logActivity, notify } from "../activity";
 import { leadTemplateVars } from "../automation/engine";
 import { evaluateConditions } from "../automation/types";
 import {
-  DEFAULT_SETTINGS, isOptIn, isOptOut, matchReply, matchesKeyword, nextNodeId, nextSendTime, triggerNode,
+  DEFAULT_SETTINGS, FLOW_QUIET_MINUTES, isOptIn, isOptOut, matchReply, matchesKeyword, nextNodeId, nextSendTime, triggerNode,
   type Audience, type FlowAction, type FlowGraph, type FlowSettings,
 } from "./types";
 
@@ -32,6 +32,9 @@ export async function startFlow(flow: FlowRow, leadId: string, opts: { interacti
   const settings = parseSettings(flow.settings);
   const start = triggerNode(graph);
   if (!start) return null;
+  // Leads who replied STOP never enter a flow (manual, broadcast, keyword or event).
+  const lead = await db.lead.findUnique({ where: { id: leadId }, select: { whatsappOptIn: true } });
+  if (!lead?.whatsappOptIn) return null;
   const existing = await db.flowRun.findFirst({
     where: { flowId: flow.id, leadId, ...(settings.reentry || opts.force ? { status: { in: ["ACTIVE", "WAITING_REPLY"] } } : {}) },
     select: { id: true },
@@ -65,6 +68,30 @@ export async function startFlowsForTrigger(trigger: string, ctx: { orgId: string
   return started;
 }
 
+/** Tells the lead's salesperson, or the managers when nobody is assigned, so a request is never lost. */
+async function notifyOwner(lead: Lead, title: string, body: string, href: string) {
+  if (lead.assignedToId) return void (await notify(lead.organizationId, lead.assignedToId, title, body, href));
+  const managers = await db.user.findMany({ where: { organizationId: lead.organizationId, active: true, role: { in: ["OWNER", "ADMIN", "SALES_MANAGER"] } }, select: { id: true } });
+  await Promise.all(managers.map((m) => notify(lead.organizationId, m.id, title, body, href)));
+}
+
+/**
+ * Has a flow just messaged this lead (or is about to, held by quiet hours)? Automation rules use this
+ * to skip their own WhatsApp message so the lead doesn't get two welcomes.
+ */
+export async function flowOwnsConversation(leadId: string, now = new Date()): Promise<boolean> {
+  const since = new Date(now.getTime() - FLOW_QUIET_MINUTES * 60_000);
+  const recent = await db.whatsAppMessage.count({ where: { leadId, direction: "OUT", flowId: { not: null }, status: { not: "FAILED" }, createdAt: { gte: since } } });
+  if (recent) return true;
+  const held = await db.flowRun.count({ where: { leadId, status: "ACTIVE", startedAt: { gte: since }, nextRunAt: { gt: now } } });
+  return held > 0;
+}
+
+/** Is the lead currently travelling through any flow? */
+export async function inActiveFlow(leadId: string): Promise<boolean> {
+  return (await db.flowRun.count({ where: { leadId, status: { in: ["ACTIVE", "WAITING_REPLY"] } } })) > 0;
+}
+
 async function runFlowAction(action: FlowAction, lead: Lead, flowName: string) {
   switch (action.type) {
     case "CREATE_TASK":
@@ -80,7 +107,7 @@ async function runFlowAction(action: FlowAction, lead: Lead, flowName: string) {
       });
       return;
     case "NOTIFY_ASSIGNEE":
-      if (lead.assignedToId) await notify(lead.organizationId, lead.assignedToId, action.title, `${lead.name} · ${lead.code} (${flowName})`, `/whatsapp?lead=${lead.id}`);
+      await notifyOwner(lead, action.title, `${lead.name} · ${lead.code} (${flowName})`, `/whatsapp?lead=${lead.id}`);
       return;
     case "NOTIFY_MANAGERS": {
       const managers = await db.user.findMany({ where: { organizationId: lead.organizationId, active: true, role: { in: ["OWNER", "ADMIN", "SALES_MANAGER"] } }, select: { id: true } });
@@ -199,13 +226,17 @@ function renderLocal(body: string, vars: Record<string, unknown>) {
  *  2. A run waiting for this lead's reply takes the matching branch.
  *  3. Other running flows stop if they're set to hand over on reply.
  *  4. Keyword-triggered flows start.
- * Returns true when a flow consumed the message.
+ * `receivedAt` is when the message arrived: runs that started after it (e.g. a "new lead" flow fired
+ * because this very message created the lead) have already answered it and must not treat it as a reply.
+ * Returns true when a flow consumed (answered) the message.
  */
-export async function handleInboundForFlows(orgId: string, leadId: string, text: string): Promise<boolean> {
+export async function handleInboundForFlows(orgId: string, leadId: string, text: string, opts: { receivedAt?: Date } = {}): Promise<boolean> {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead) return false;
+  const receivedAt = opts.receivedAt ?? new Date();
 
   if (isOptOut(text)) {
+    if (!lead.whatsappOptIn) return true; // already unsubscribed: don't repeat the confirmation
     await db.lead.update({ where: { id: leadId }, data: { whatsappOptIn: false } });
     await db.flowRun.updateMany({ where: { leadId, status: { in: ["ACTIVE", "WAITING_REPLY"] } }, data: { status: "STOPPED", stopReason: "Opted out", nextRunAt: null } });
     await sendWhatsApp({ orgId, phone: lead.phone, body: "You've been unsubscribed from our WhatsApp updates. Reply START anytime to subscribe again.", leadId, automated: true });
@@ -215,31 +246,55 @@ export async function handleInboundForFlows(orgId: string, leadId: string, text:
   if (isOptIn(text) && !lead.whatsappOptIn) {
     await db.lead.update({ where: { id: leadId }, data: { whatsappOptIn: true } });
     await sendWhatsApp({ orgId, phone: lead.phone, body: "Welcome back! You're subscribed to our WhatsApp updates again. ☀️", leadId, automated: true });
+    await logActivity({ orgId, leadId, type: "WHATSAPP", title: "Customer opted back in to WhatsApp (START)" });
     return true;
   }
+  if (!lead.whatsappOptIn) return false; // opted out: the team still sees the message, no automated replies
 
-  let consumed = false;
-  const waiting = await db.flowRun.findMany({ where: { leadId, status: "WAITING_REPLY" }, include: { flow: true } });
+  const handOver = async (run: { id: string; flow: { name: string } }, reason: string) => {
+    await db.flowRun.update({ where: { id: run.id }, data: { status: "STOPPED", stopReason: reason, nextRunAt: null, currentNodeId: null } });
+    await notifyOwner(lead, `💬 ${lead.name} replied, over to you`, `${run.flow.name}: “${text.slice(0, 100)}”`, `/whatsapp?lead=${lead.id}`);
+  };
+
+  // A flow that started because of this very message has already answered it.
+  let consumed = (await db.flowRun.count({ where: { leadId, startedAt: { gte: receivedAt } } })) > 0;
+  const waiting = await db.flowRun.findMany({ where: { leadId, status: "WAITING_REPLY", startedAt: { lt: receivedAt } }, include: { flow: true } });
   for (const run of waiting) {
     const graph = parseGraph(run.flow.graph);
     const node = graph.nodes.find((n) => n.id === run.currentNodeId);
-    if (!node || node.data.kind !== "waitReply") continue;
+    if (!node || node.data.kind !== "waitReply") {
+      await handOver(run, "Step was removed from the flow, handed to sales");
+      consumed = true;
+      continue;
+    }
     const handle = matchReply(text, node.data.options);
+    const t = triggerNode(graph);
+    // The customer typed the bot's keyword again ("hi") instead of choosing: start the menu over.
+    if (handle === "any" && t?.data.trigger === "KEYWORD" && matchesKeyword(text, t.data.keywords)) {
+      await logStep(run.id, run.flowId, node.id, "started over");
+      await db.flowRun.update({ where: { id: run.id }, data: { status: "COMPLETED", stopReason: "Customer started over", nextRunAt: null, currentNodeId: null } });
+      continue;
+    }
     let target = nextNodeId(graph, node.id, handle);
-    let outcome = handle === "any" ? "replied (other)" : `option: ${node.data.options[Number(handle.slice(4))]}`;
     if (!target && handle !== "any") target = nextNodeId(graph, node.id, "any");
-    if (!target && !graph.edges.some((e) => e.source === node.id && (e.sourceHandle === handle || e.sourceHandle === "any"))) outcome += " (no branch, so the flow ends)";
+    if (!target && handle === "any") {
+      // Nothing in the flow handles this answer, so a person should read it.
+      await logStep(run.id, run.flowId, node.id, "replied (other), handed to sales");
+      await handOver(run, "Customer replied, handed to sales");
+      consumed = true;
+      continue;
+    }
+    const outcome = handle === "any" ? "replied (other)" : `option: ${node.data.options[Number(handle.slice(4))]}${target ? "" : " (no branch, so the flow ends)"}`;
     await logStep(run.id, run.flowId, node.id, outcome);
     await db.flowRun.update({ where: { id: run.id }, data: { currentNodeId: target, status: "ACTIVE", nextRunAt: new Date() } });
     await advanceRun(run.id, { interactive: true });
     consumed = true;
   }
 
-  const active = await db.flowRun.findMany({ where: { leadId, status: "ACTIVE", id: { notIn: waiting.map((w) => w.id) } }, include: { flow: true } });
+  const active = await db.flowRun.findMany({ where: { leadId, status: "ACTIVE", startedAt: { lt: receivedAt }, id: { notIn: waiting.map((w) => w.id) } }, include: { flow: true } });
   for (const run of active) {
     if (!parseSettings(run.flow.settings).stopOnReply) continue;
-    await db.flowRun.update({ where: { id: run.id }, data: { status: "STOPPED", stopReason: "Customer replied, handed to sales", nextRunAt: null } });
-    if (lead.assignedToId) await notify(orgId, lead.assignedToId, `💬 ${lead.name} replied, flow paused`, `${run.flow.name}: “${text.slice(0, 100)}”`, `/whatsapp?lead=${lead.id}`);
+    await handOver(run, "Customer replied, handed to sales");
   }
 
   if (!consumed) {
@@ -253,6 +308,16 @@ export async function handleInboundForFlows(orgId: string, leadId: string, text:
     }
   }
   return consumed;
+}
+
+/** After a flow is edited: runs sitting on a step that no longer exists leave the flow cleanly. */
+export async function stopRunsOnMissingSteps(flowId: string, graph: FlowGraph): Promise<number> {
+  const ids = new Set(graph.nodes.map((n) => n.id));
+  const runs = await db.flowRun.findMany({ where: { flowId, status: { in: ["ACTIVE", "WAITING_REPLY"] } }, select: { id: true, currentNodeId: true } });
+  const orphaned = runs.filter((r) => r.currentNodeId && !ids.has(r.currentNodeId)).map((r) => r.id);
+  if (orphaned.length)
+    await db.flowRun.updateMany({ where: { id: { in: orphaned } }, data: { status: "STOPPED", stopReason: "Step was removed from the flow", nextRunAt: null, currentNodeId: null } });
+  return orphaned.length;
 }
 
 /** Cron: advance due runs, fire reply timeouts, process broadcasts. */
@@ -320,14 +385,11 @@ async function runBroadcasts(now: Date) {
       }
     }
     const rest = queue.slice(batch.length);
-    await db.broadcast.update({
-      where: { id: b.id },
-      data: {
-        queue: rest,
-        processed: { increment: batch.length },
-        failed: { increment: failed },
-        ...(rest.length ? {} : { status: "SENT", completedAt: new Date(), queue: [] }),
-      },
+    await db.broadcast.update({ where: { id: b.id }, data: { processed: { increment: batch.length }, failed: { increment: failed } } });
+    // Only a broadcast that is still sending moves on (it may have been cancelled during this batch).
+    await db.broadcast.updateMany({
+      where: { id: b.id, status: "SENDING" },
+      data: rest.length ? { queue: rest } : { status: "SENT", completedAt: new Date(), queue: [] },
     });
   }
   return sent;

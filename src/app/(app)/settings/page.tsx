@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/ui";
 import { BRAND } from "@/lib/brand";
 import { QuotationPricesPanel } from "@/components/settings/quotation-prices-panel";
 import { AgreementPanel } from "@/components/settings/agreement-panel";
+import { QuotationTemplatePanel } from "@/components/settings/quotation-template-panel";
 import { BillingPanel, CompanyPanel, IntegrationsPanel, ProfilePanel, RulesPanel, TeamPanel, TemplatesPanel, WorkflowPanel } from "@/components/settings/settings-panels";
 
 export const metadata = { title: "Settings" };
@@ -18,6 +19,7 @@ const TABS = [
   ["company", "Company"],
   ["pricing", "Pricing & subsidy"],
   ["quotation", "Quotation prices"],
+  ["quotation-template", "Quotation template"],
   ["agreement", "Agreement"],
   ["qualification", "Qualification"],
   ["field", "GPS validation"],
@@ -59,6 +61,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div className="min-w-0">
           {tab === "company" && <CompanyPanel org={org} />}
           {tab === "quotation" && <QuotationPricesPanel settings={settings} />}
+          {tab === "quotation-template" && (
+            <QuotationTemplatePanel
+              aiReady={aiEnabled()}
+              initial={(await db.quotationTemplate.findMany({ where: { organizationId: session.orgId }, orderBy: { updatedAt: "desc" } })).map((t) => ({
+                id: t.id, name: t.name, active: t.active, sourceFileName: t.sourceFileName, html: t.html, updatedAt: t.updatedAt.toISOString(),
+              }))}
+            />
+          )}
           {tab === "agreement" && <AgreementPanel settings={settings} org={org} />}
           {(tab === "pricing" || tab === "qualification" || tab === "field" || tab === "schedule") && <RulesPanel key={tab} settings={settings} section={tab} />}
           {tab === "workflow" && (
@@ -74,9 +84,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 await db.user.findMany({
                   where: { organizationId: session.orgId },
                   orderBy: [{ active: "desc" }, { name: "asc" }],
-                  select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true, modules: true },
+                  select: { id: true, name: true, email: true, phone: true, role: true, active: true, territory: true, avatarColor: true, googleEmail: true, lastLoginAt: true, modules: true, customRoleId: true },
                 })
               ).map((u) => ({ ...u, lastLoginAt: u.lastLoginAt?.toISOString() ?? null, modules: Array.isArray(u.modules) ? (u.modules as string[]) : null }))}
+              roles={(
+                await db.customRole.findMany({ where: { organizationId: session.orgId }, orderBy: { name: "asc" }, include: { _count: { select: { users: true } } } })
+              ).map((r) => ({ id: r.id, name: r.name, baseRole: r.baseRole, modules: Array.isArray(r.modules) ? (r.modules as string[]) : [], userCount: r._count.users }))}
             />
           )}
           {tab === "templates" && <TemplatesPanel templates={await db.messageTemplate.findMany({ where: { organizationId: session.orgId }, orderBy: { name: "asc" } })} />}

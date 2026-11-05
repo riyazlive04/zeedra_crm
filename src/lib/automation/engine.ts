@@ -9,7 +9,8 @@ import { formatINR } from "../text";
 import { sendWhatsApp } from "../whatsapp";
 import { logActivity, notify } from "../activity";
 import { evaluateConditions, type Action, type Condition, type Trigger } from "./types";
-import { startFlowsForTrigger } from "../nurture/engine";
+import { flowOwnsConversation, inActiveFlow, startFlowsForTrigger } from "../nurture/engine";
+import { FLOW_OWNED_TRIGGERS } from "../nurture/types";
 
 type LeadWithUser = Lead & { assignedTo?: { name: string; phone: string | null } | null };
 
@@ -65,6 +66,8 @@ export interface FireContext {
   refKey?: string;
   extra?: Record<string, unknown>;
   vars?: Record<string, string | number | null | undefined>;
+  /** A WhatsApp flow already answered this event (e.g. a keyword bot replied to the inbound message). */
+  flowHandled?: boolean;
 }
 
 /**
@@ -85,6 +88,14 @@ export async function fireTrigger(trigger: Trigger, ctx: FireContext): Promise<n
     : null;
   const evalCtx: Record<string, unknown> = { ...(lead ?? {}), ...(ctx.extra ?? {}) };
   let ran = 0;
+  // One conversation owner: when a live flow has just messaged this lead (or is nurturing a silent
+  // one), a rule's WhatsApp message on the same kind of event is skipped. Its other actions still run.
+  let flowOwned: boolean | null = null;
+  const skipWhatsApp = async () => {
+    if (!lead || !FLOW_OWNED_TRIGGERS.includes(trigger)) return false;
+    flowOwned ??= !!ctx.flowHandled || (await flowOwnsConversation(lead.id)) || (trigger === "NO_RESPONSE" && (await inActiveFlow(lead.id)));
+    return flowOwned;
+  };
 
   for (const rule of rules) {
     if (!evaluateConditions((rule.conditions as unknown as Condition[]) ?? [], evalCtx)) continue;
@@ -96,8 +107,13 @@ export async function fireTrigger(trigger: Trigger, ctx: FireContext): Promise<n
       throw e;
     }
     const errors: string[] = [];
+    const notes: string[] = [];
     for (const action of (rule.actions as unknown as Action[]) ?? []) {
       try {
+        if (action.type === "SEND_WHATSAPP" && (await skipWhatsApp())) {
+          notes.push("WhatsApp message skipped because a WhatsApp flow is already talking to this lead");
+          continue;
+        }
         await runAction(action, ctx, lead, rule.name);
       } catch (e) {
         errors.push(`${action.type}: ${e instanceof Error ? e.message : String(e)}`);
@@ -105,10 +121,10 @@ export async function fireTrigger(trigger: Trigger, ctx: FireContext): Promise<n
     }
     ran++;
     await db.automationRule.update({ where: { id: rule.id }, data: { runCount: { increment: 1 }, lastRunAt: new Date() } });
-    if (errors.length)
+    if (errors.length || notes.length)
       await db.automationRun.update({
         where: { ruleId_refKey: { ruleId: rule.id, refKey } },
-        data: { status: "ERROR", detail: errors.join("; ").slice(0, 1000) },
+        data: { status: errors.length ? "ERROR" : "OK", detail: [...errors, ...notes].join("; ").slice(0, 1000) },
       });
     if (lead)
       await logActivity({
@@ -116,7 +132,7 @@ export async function fireTrigger(trigger: Trigger, ctx: FireContext): Promise<n
         leadId: lead.id,
         type: "AUTOMATION",
         title: `Automation: ${rule.name}`,
-        body: errors.length ? `Completed with errors: ${errors.join("; ")}` : undefined,
+        body: errors.length ? `Completed with errors: ${errors.join("; ")}` : notes.length ? notes.join("; ") : undefined,
       });
   }
   return ran;

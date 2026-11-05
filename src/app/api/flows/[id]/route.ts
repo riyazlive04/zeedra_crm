@@ -3,8 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { route, parseBody } from "@/lib/api";
 import { db } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
-import { validateFlow, type FlowGraph } from "@/lib/nurture/types";
-import { parseGraph } from "@/lib/nurture/engine";
+import { sanitizeGraph, validateFlow, type FlowGraph } from "@/lib/nurture/types";
+import { parseGraph, stopRunsOnMissingSteps } from "@/lib/nurture/engine";
 
 type P = { id: string };
 
@@ -35,7 +35,8 @@ const patchSchema = z.object({
 export const PATCH = route<P>("automations:manage", async ({ req, session, params }) => {
   const flow = await getFlow(session.orgId, params.id);
   const input = await parseBody(req, patchSchema);
-  const graph: FlowGraph = input.graph ? (input.graph as FlowGraph) : parseGraph(flow.graph);
+  // Never store links to steps or reply options that no longer exist.
+  const graph: FlowGraph = input.graph ? sanitizeGraph(input.graph as FlowGraph) : parseGraph(flow.graph);
   if (input.active ?? flow.active) {
     const issues = validateFlow(graph);
     if (issues.length) throw new ApiError(400, `Fix before activating: ${issues.join("; ")}`);
@@ -46,16 +47,19 @@ export const PATCH = route<P>("automations:manage", async ({ req, session, param
     const found = await db.messageTemplate.count({ where: { organizationId: session.orgId, key: { in: keys } } });
     if (found < new Set(keys).size) throw new ApiError(400, "A message step uses a template that no longer exists");
   }
-  return db.flow.update({
+  const updated = await db.flow.update({
     where: { id: flow.id },
     data: {
       name: input.name,
       description: input.description,
       active: input.active,
-      graph: input.graph as unknown as Prisma.InputJsonValue | undefined,
+      graph: input.graph ? (graph as unknown as Prisma.InputJsonValue) : undefined,
       settings: input.settings as unknown as Prisma.InputJsonValue | undefined,
     },
   });
+  // Leads sitting on a step that was just deleted leave the flow instead of getting stuck.
+  const removedRuns = input.graph ? await stopRunsOnMissingSteps(flow.id, graph) : 0;
+  return { ...updated, removedRuns };
 });
 
 export const DELETE = route<P>("automations:manage", async ({ session, params }) => {

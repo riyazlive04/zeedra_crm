@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { CustomQuotation } from "@/components/quotes/custom-quotation";
+import { renderedQuotationHtml } from "@/lib/services/quote-templates";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ChevronLeft, CheckCircle2, XCircle, Smartphone, Clock, MapPin, Eye, FileSignature } from "lucide-react";
@@ -47,6 +49,10 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
   });
   const isLatest = !q.supersededAt;
 
+  // Quotations made with the organisation's own template render in that design.
+  const customHtml = isQuotifySnapshot(q.quoteData)
+    ? await renderedQuotationHtml(q.organizationId, q.quoteData, { number: q.number, version: q.version, createdAt: q.createdAt, validityDays: s.quotationValidityDays, company: docCompany(q.organization, s) })
+    : null;
   return (
     <div className="space-y-6">
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
@@ -90,7 +96,9 @@ export default async function QuotationPage({ params }: { params: Promise<{ id: 
       )}
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_380px]">
-        {isQuotifySnapshot(q.quoteData) ? (
+        {customHtml ? (
+          <CustomQuotation html={customHtml} />
+        ) : isQuotifySnapshot(q.quoteData) ? (
           <QuotationDocument snap={q.quoteData} number={q.number} version={q.version} createdAt={q.createdAt} company={docCompany(q.organization, s)} />
         ) : (
           <ProposalDocument

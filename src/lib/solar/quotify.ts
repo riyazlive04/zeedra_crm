@@ -532,6 +532,8 @@ export interface QuotifySnapshot {
   paymentStages: { name: string; pct: number; when: string }[];
   customer: { name: string; phone: string; address: string; pincode: string; ebNumber: string };
   result: QuotifyResult;
+  /** The organisation's own quotation template this quote was made with (null = built-in design). */
+  templateId?: string | null;
 }
 
 export function isQuotifySnapshot(v: unknown): v is QuotifySnapshot {

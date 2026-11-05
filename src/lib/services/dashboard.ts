@@ -16,36 +16,34 @@ export async function dashboardStats(session: Session) {
   const twoDaysAgo = new Date(now.getTime() - 2 * 86_400_000);
   const open = { stage: { notIn: ["WON", "LOST", "DISQUALIFIED"] as ("WON" | "LOST" | "DISQUALIFIED")[] } };
 
-  const [
-    leadsToday, leadsMonth, hotOpen, visitsToday, pipelineAgg, wonMonth, wonAgg, closed30, won30, overdue, flagged,
-    stageGroups, sourceGroups, tempGroups, staleHot, trendLeads, users, quotesByUser, wonByUser, upcoming,
-  ] = await Promise.all([
-    db.lead.count({ where: { ...scope, createdAt: { gte: startToday } } }),
-    db.lead.count({ where: { ...scope, createdAt: { gte: startMonth } } }),
-    db.lead.count({ where: { ...scope, ...open, temperature: "HOT" } }),
+  // Performance: the 13 separate lead counts/aggregates this page used to run are now one scan of
+  // the few columns they need, tallied in memory below. On a remote database that's one round
+  // trip instead of many (the connection pool otherwise queues them).
+  const orgWide = !scope.OR;
+  const [leadRows, visitsToday, flagged, staleHot, users, quotesByUser, wonByUserScoped, upcoming] = await Promise.all([
+    db.lead.findMany({
+      where: scope,
+      select: {
+        stage: true, temperature: true, source: true, createdAt: true, updatedAt: true, wonAt: true, nextFollowUpAt: true,
+        estimatedCost: true, dealValue: true, recommendedKw: true, assignedToId: true,
+      },
+    }),
     db.appointment.count({
       where: { organizationId: session.orgId, startAt: { gte: startToday, lt: endToday }, status: { not: "CANCELLED" }, ...(scope.OR ? { assignedToId: session.userId } : {}) },
     }),
-    db.lead.aggregate({ where: { ...scope, ...open, stage: { in: ["QUALIFIED", "SITE_VISIT_SCHEDULED", "SITE_VISIT_DONE", "QUOTATION_SENT", "NEGOTIATION"] } }, _sum: { estimatedCost: true } }),
-    db.lead.count({ where: { ...scope, stage: "WON", wonAt: { gte: startMonth } } }),
-    db.lead.aggregate({ where: { ...scope, stage: "WON", wonAt: { gte: startMonth } }, _sum: { dealValue: true, recommendedKw: true } }),
-    db.lead.count({ where: { ...scope, stage: { in: ["WON", "LOST"] }, updatedAt: { gte: since30 } } }),
-    db.lead.count({ where: { ...scope, stage: "WON", updatedAt: { gte: since30 } } }),
-    db.lead.count({ where: { ...scope, ...open, nextFollowUpAt: { lt: now } } }),
     db.quotation.count({ where: { organizationId: session.orgId, createdAt: { gte: new Date(now.getTime() - 7 * 86_400_000) }, geoVerdict: { notIn: ["VERIFIED", "OFFICE_CREATED"] } } }),
-    db.lead.groupBy({ by: ["stage"], where: scope, _count: { _all: true } }),
-    db.lead.groupBy({ by: ["source"], where: { ...scope, createdAt: { gte: since30 } }, _count: { _all: true } }),
-    db.lead.groupBy({ by: ["temperature"], where: { ...scope, ...open }, _count: { _all: true } }),
     db.lead.findMany({
-      where: { ...scope, ...open, temperature: "HOT", OR: [{ lastContactAt: { lt: twoDaysAgo } }, { lastContactAt: null }] },
+      where: { ...scope, ...open, temperature: "HOT", AND: [{ OR: [{ lastContactAt: { lt: twoDaysAgo } }, { lastContactAt: null }] }] },
       select: { id: true, name: true, code: true, lastContactAt: true, createdAt: true, assignedTo: { select: { name: true } } },
       take: 8,
       orderBy: { lastContactAt: "asc" },
     }),
-    db.lead.findMany({ where: { ...scope, createdAt: { gte: new Date(now.getTime() - 13 * 86_400_000) } }, select: { createdAt: true, stage: true } }),
     db.user.findMany({ where: { organizationId: session.orgId, active: true, role: { in: ["FIELD_SALES", "TELECALLER", "SALES_MANAGER"] } }, select: { id: true, name: true, avatarColor: true, role: true } }),
     db.quotation.groupBy({ by: ["createdById", "geoVerdict"], where: { organizationId: session.orgId, createdAt: { gte: since30 } }, _count: { _all: true } }),
-    db.lead.groupBy({ by: ["assignedToId"], where: { organizationId: session.orgId, stage: "WON", wonAt: { gte: since30 } }, _count: { _all: true }, _sum: { dealValue: true } }),
+    // The team leaderboard is org-wide; for org-wide viewers it comes from the scan instead.
+    orgWide
+      ? Promise.resolve(null)
+      : db.lead.groupBy({ by: ["assignedToId"], where: { organizationId: session.orgId, stage: "WON", wonAt: { gte: since30 } }, _count: { _all: true }, _sum: { dealValue: true } }),
     db.appointment.findMany({
       where: { organizationId: session.orgId, startAt: { gte: now }, status: "SCHEDULED", ...(scope.OR ? { assignedToId: session.userId } : {}) },
       orderBy: { startAt: "asc" },
@@ -54,7 +52,49 @@ export async function dashboardStats(session: Session) {
     }),
   ]);
 
-  const stageCount = Object.fromEntries(stageGroups.map((g) => [g.stage, g._count._all]));
+  const OPEN_EXCLUDED = new Set(["WON", "LOST", "DISQUALIFIED"]);
+  const PIPELINE = new Set(["QUALIFIED", "SITE_VISIT_SCHEDULED", "SITE_VISIT_DONE", "QUOTATION_SENT", "NEGOTIATION"]);
+  const trendFrom = new Date(now.getTime() - 13 * 86_400_000);
+  let leadsToday = 0, leadsMonth = 0, hotOpen = 0, pipelineValue = 0, wonMonth = 0, wonValueMonth = 0, wonKwMonth = 0, closed30 = 0, won30 = 0, overdue = 0;
+  const stageCount: Record<string, number> = {};
+  const sourceCount = new Map<string, number>();
+  const tempCount: Record<string, number> = {};
+  const trendLeads: { createdAt: Date; stage: string }[] = [];
+  const wonByUserMap = new Map<string | null, { count: number; value: number }>();
+  for (const l of leadRows) {
+    const isOpen = !OPEN_EXCLUDED.has(l.stage);
+    stageCount[l.stage] = (stageCount[l.stage] ?? 0) + 1;
+    if (l.createdAt >= startToday) leadsToday++;
+    if (l.createdAt >= startMonth) leadsMonth++;
+    if (l.createdAt >= since30) sourceCount.set(l.source, (sourceCount.get(l.source) ?? 0) + 1);
+    if (l.createdAt >= trendFrom) trendLeads.push({ createdAt: l.createdAt, stage: l.stage });
+    if (isOpen) {
+      tempCount[l.temperature] = (tempCount[l.temperature] ?? 0) + 1;
+      if (l.temperature === "HOT") hotOpen++;
+      if (PIPELINE.has(l.stage)) pipelineValue += l.estimatedCost ?? 0;
+      if (l.nextFollowUpAt && l.nextFollowUpAt < now) overdue++;
+    }
+    if (l.stage === "WON" && l.wonAt && l.wonAt >= startMonth) {
+      wonMonth++;
+      wonValueMonth += l.dealValue ?? 0;
+      wonKwMonth += l.recommendedKw ?? 0;
+    }
+    if ((l.stage === "WON" || l.stage === "LOST") && l.updatedAt >= since30) {
+      closed30++;
+      if (l.stage === "WON") won30++;
+    }
+    if (orgWide && l.stage === "WON" && l.wonAt && l.wonAt >= since30) {
+      const w = wonByUserMap.get(l.assignedToId) ?? { count: 0, value: 0 };
+      w.count++;
+      w.value += l.dealValue ?? 0;
+      wonByUserMap.set(l.assignedToId, w);
+    }
+  }
+  const wonByUser = wonByUserScoped ?? [...wonByUserMap].map(([assignedToId, w]) => ({ assignedToId, _count: { _all: w.count }, _sum: { dealValue: w.value } }));
+  const sourceGroups = [...sourceCount].map(([source, n]) => ({ source, _count: { _all: n } }));
+  const tempGroups = Object.entries(tempCount).map(([temperature, n]) => ({ temperature, _count: { _all: n } }));
+  const pipelineAgg = { _sum: { estimatedCost: pipelineValue } };
+  const wonAgg = { _sum: { dealValue: wonValueMonth, recommendedKw: wonKwMonth } };
   // Cumulative funnel: a lead at "Quotation sent" has also passed every earlier stage.
   const funnel = FUNNEL.map((s, i) => ({
     stage: s,

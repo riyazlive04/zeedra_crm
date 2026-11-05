@@ -191,6 +191,7 @@ function priceQuotation(
   input: QuotifyInput,
   customer: QuoteCustomer,
   base?: Pick<QuotifySnapshot, "prices" | "custom" | "stateSubsidy" | "paymentStages">,
+  templateId: string | null = null,
 ) {
   const cfg = quotationConfig(s);
   const prices = base?.prices ?? cfg.P;
@@ -212,6 +213,7 @@ function priceQuotation(
     paymentStages: base?.paymentStages ?? s.quotation.paymentStages,
     customer,
     result: r,
+    templateId,
   };
   let savings25 = 0;
   for (let y = 0, ys = r.savings.annualSave; y < 25; y++, ys *= 1.06) savings25 += ys;
@@ -258,7 +260,9 @@ export async function createQuotation(session: Session, input: QuotationInput) {
   const c = input.customer;
   const q = input.quote as QuotifyInput;
   // Price first, so a bad form never creates a lead.
-  const { r, columns } = priceQuotation(s, org.name, q, c);
+  // New quotations use the organisation's own template when one is switched on.
+  const tpl = await db.quotationTemplate.findFirst({ where: { organizationId: session.orgId, active: true }, select: { id: true } });
+  const { r, columns } = priceQuotation(s, org.name, q, c, undefined, tpl?.id ?? null);
 
   let lead: Lead;
   let leadCreated = false;
@@ -428,7 +432,7 @@ export async function reviseQuotation(session: Session, quotationId: string, inp
       panelBrand: input.panelBrand ?? snap.input.panelBrand,
       inverterBrand: input.inverterBrand ?? snap.input.inverterBrand,
     };
-    const { r, columns } = priceQuotation(s, org.name, quote, snap.customer, snap);
+    const { r, columns } = priceQuotation(s, org.name, quote, snap.customer, snap, snap.templateId ?? null);
     priced = columns;
     netCost = r.netCost;
   } else {

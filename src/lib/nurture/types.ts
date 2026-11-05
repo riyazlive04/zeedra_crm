@@ -107,7 +107,8 @@ export function outputHandles(d: FlowNodeData): { id: string; label: string }[] 
   }
 }
 
-export const OPT_OUT_WORDS = ["stop", "unsubscribe", "stop all", "opt out", "optout", "cancel"];
+// "cancel" is deliberately not here: customers say it about site visits, not about WhatsApp.
+export const OPT_OUT_WORDS = ["stop", "unsubscribe", "stop all", "opt out", "optout"];
 export const OPT_IN_WORDS = ["start", "subscribe", "unstop"];
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, "").replace(/\s+/g, " ");
@@ -242,6 +243,135 @@ function handleOrder(h: string) {
   if (h.startsWith("opt:")) return Number(h.slice(4));
   if (h === "any") return 90;
   return 99;
+}
+
+/**
+ * Deleting reply option `index` of a wait-for-reply node: its branch goes, and the branches of later
+ * options move up one slot so each stays attached to the same answer.
+ */
+export function removeReplyOption<E extends { source: string; sourceHandle?: string | null }>(edges: E[], nodeId: string, index: number): E[] {
+  return edges.flatMap((e) => {
+    if (e.source !== nodeId || !e.sourceHandle?.startsWith("opt:")) return [e];
+    const i = Number(e.sourceHandle.slice(4));
+    if (i === index) return [];
+    return i > index ? [{ ...e, sourceHandle: `opt:${i - 1}` }] : [e];
+  });
+}
+
+/** Drops edges that point at missing steps or at outputs a step no longer has (one link per output). */
+export function sanitizeGraph(graph: FlowGraph): FlowGraph {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const seen = new Set<string>();
+  const edges = graph.edges.filter((e) => {
+    const src = byId.get(e.source);
+    if (!src || !byId.has(e.target) || e.source === e.target) return false;
+    if (!outputHandles(src.data).some((h) => h.id === e.sourceHandle)) return false;
+    const k = `${e.source}:${e.sourceHandle}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return { nodes: graph.nodes, edges };
+}
+
+/** WhatsApp's customer-service window: free text / buttons only reach people who wrote in the last 24 h. */
+export const SERVICE_WINDOW_MINUTES = 1440;
+
+export interface FlowWarning {
+  nodeId: string | null;
+  text: string;
+}
+
+/**
+ * Non-blocking advice shown in the editor. Mainly: which message steps can go out when the customer
+ * hasn't written in the last 24 hours, so they need a Meta-approved template on the live Cloud API.
+ * Walks every path, tracking the worst case "minutes since the customer last wrote".
+ */
+export function flowWarnings(graph: FlowGraph, templates: { key: string; metaTemplateName: string | null }[]): FlowWarning[] {
+  const out: FlowWarning[] = [];
+  const start = triggerNode(graph);
+  if (!start) return out;
+  const approved = new Set(templates.filter((t) => t.metaTemplateName).map((t) => t.key));
+  const customerWroteFirst = start.data.trigger === "KEYWORD" || start.data.trigger === "WHATSAPP_RECEIVED";
+  const CLOSED = Number.POSITIVE_INFINITY;
+  const worst = new Map<string, number>();
+  const queue: [string, number][] = [];
+  const push = (id: string | null, m: number) => {
+    if (!id) return;
+    const v = m >= SERVICE_WINDOW_MINUTES ? CLOSED : m;
+    const cur = worst.get(id);
+    if (cur !== undefined && cur >= v) return;
+    worst.set(id, v);
+    queue.push([id, v]);
+  };
+  const firstId = nextNodeId(graph, start.id, "next");
+  push(firstId, customerWroteFirst ? 0 : CLOSED);
+  while (queue.length) {
+    const [id, m] = queue.shift()!;
+    if (worst.get(id) !== m) continue;
+    const node = graph.nodes.find((n) => n.id === id);
+    if (!node) continue;
+    for (const e of graph.edges.filter((x) => x.source === id)) {
+      const d = node.data;
+      if (d.kind === "wait") push(e.target, m + d.minutes);
+      else if (d.kind === "waitReply") push(e.target, e.sourceHandle === "timeout" ? m + d.timeoutMinutes : 0);
+      else push(e.target, m);
+    }
+  }
+  // First message the customer gets (straight line from the start, before any pause).
+  let first: string | null = firstId;
+  for (let i = 0; first && i < 50; i++) {
+    const n = graph.nodes.find((x) => x.id === first);
+    if (!n || n.data.kind === "message" || n.data.kind === "wait" || n.data.kind === "waitReply") break;
+    first = nextNodeId(graph, n.id, n.data.kind === "condition" ? "yes" : "next");
+  }
+  for (const n of graph.nodes) {
+    const d = n.data;
+    if (d.kind !== "message" || !worst.has(n.id)) continue;
+    const isApproved = !!d.templateKey && approved.has(d.templateKey);
+    if (worst.get(n.id) === CLOSED && !isApproved) {
+      out.push({
+        nodeId: n.id,
+        text:
+          n.id === first && !customerWroteFirst
+            ? "The first message is not a Meta-approved template. On live WhatsApp, new leads from forms and ads won't receive it. Pick an approved template for this step."
+            : "This message can go out more than 24 hours after the customer last wrote. On live WhatsApp it needs a Meta-approved template, or it won't be delivered.",
+      });
+    }
+    const buttons = d.buttons.map((b) => b.trim()).filter(Boolean);
+    if (buttons.length && isApproved)
+      out.push({ nodeId: n.id, text: "Quick-reply buttons aren't added to Meta templates. Add the buttons to the template in WhatsApp Manager instead." });
+    if (buttons.length) {
+      const nx = graph.nodes.find((x) => x.id === nextNodeId(graph, n.id, "next"));
+      if (!nx || nx.data.kind !== "waitReply")
+        out.push({ nodeId: n.id, text: "This message has buttons but no Wait for reply step after it, so the tap can't choose a branch." });
+      else {
+        const opts = nx.data.options.map(norm);
+        const missing = buttons.filter((b) => !opts.includes(norm(b)));
+        if (missing.length) out.push({ nodeId: nx.id, text: `Button "${missing[0]}" has no matching reply option, so tapping it goes to "Any other reply".` });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Automation-rule triggers whose WhatsApp message a live flow replaces. For these, a rule's
+ * SEND_WHATSAPP is skipped when a flow has just messaged the lead (the flow owns the conversation).
+ * Transactional messages (appointment confirmations and reminders, quotation links, won welcome) are
+ * never skipped because flows don't carry that information.
+ */
+export const FLOW_OWNED_TRIGGERS: readonly string[] = ["LEAD_CREATED", "LEAD_QUALIFIED", "LEAD_DISQUALIFIED", "TEMPERATURE_CHANGED", "NO_RESPONSE", "WHATSAPP_RECEIVED"];
+
+/** How long after a flow message a "flow-owned" rule stays quiet. */
+export const FLOW_QUIET_MINUTES = 10;
+
+/** Rule triggers that fire at (almost) the same moment as a flow trigger, for the editor's overlap warning. */
+export function overlappingRuleTriggers(trigger: string): string[] {
+  if (trigger === "LEAD_CREATED") return ["LEAD_CREATED", "LEAD_QUALIFIED", "LEAD_DISQUALIFIED"];
+  if (trigger === "KEYWORD") return ["WHATSAPP_RECEIVED"];
+  if (trigger === "MANUAL") return [];
+  return [trigger];
 }
 
 // ─── Ready-made solar nurture recipes ──────────────────────────────────

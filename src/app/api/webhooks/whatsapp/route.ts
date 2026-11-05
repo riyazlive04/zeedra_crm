@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         if (await db.whatsAppMessage.findUnique({ where: { providerId: m.id } })) continue; // Meta retries
         const text = m.text?.body ?? m.button?.text ?? m.interactive?.button_reply?.title ?? `[${m.type} message]`;
         const name = v.contacts?.find((c) => c.wa_id === m.from)?.profile?.name ?? "WhatsApp enquiry";
+        const receivedAt = new Date();
         let lead = await db.lead.findFirst({ where: { organizationId: org.id, phone: m.from } });
         if (!lead) {
           const r = await createLead(org.id, { name, phone: m.from, source: "WHATSAPP" });
@@ -72,8 +73,11 @@ export async function POST(req: NextRequest) {
         await logActivity({ orgId: org.id, leadId: lead.id, type: "WHATSAPP", title: "WhatsApp received", body: text });
         if (lead.assignedToId) await notify(org.id, lead.assignedToId, `💬 ${lead.name}`, text.slice(0, 140), `/whatsapp?lead=${lead.id}`);
         // Flows first: opt-out, reply branches, keyword bots. A failure here must not lose the message.
-        await handleInboundForFlows(org.id, lead.id, text).catch((e) => console.error("[flows] inbound failed", e));
-        await fireTrigger("WHATSAPP_RECEIVED", { orgId: org.id, leadId: lead.id, refKey: `wa-in:${m.id}` });
+        const flowHandled = await handleInboundForFlows(org.id, lead.id, text, { receivedAt }).catch((e) => {
+          console.error("[flows] inbound failed", e);
+          return false;
+        });
+        await fireTrigger("WHATSAPP_RECEIVED", { orgId: org.id, leadId: lead.id, refKey: `wa-in:${m.id}`, flowHandled });
       }
     }
   }

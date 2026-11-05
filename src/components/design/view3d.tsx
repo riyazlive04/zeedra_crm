@@ -19,6 +19,8 @@ export interface View3DProps {
   onBearing?: (deg: number) => void;
   /** Increment to snap the camera back to north-up. */
   resetNorth?: number;
+  /** Slowly spin around the roof ("360° preview"). */
+  autoRotate?: boolean;
   className?: string;
 }
 
@@ -67,16 +69,72 @@ type Ground = Awaited<ReturnType<typeof loadGround>>;
 
 function textSprite(text: string, color = "#fde047", scale = 1) {
   const c = document.createElement("canvas");
-  c.width = 128; c.height = 64;
+  const w = Math.max(128, text.length * 30); // wide enough for "06:17"
+  c.width = w; c.height = 64;
   const g = c.getContext("2d")!;
   g.font = "bold 40px system-ui";
   g.textAlign = "center"; g.textBaseline = "middle";
-  g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,.65)"; g.strokeText(text, 64, 32);
-  g.fillStyle = color; g.fillText(text, 64, 32);
+  g.lineWidth = 6; g.strokeStyle = "rgba(0,0,0,.65)"; g.strokeText(text, w / 2, 32);
+  g.fillStyle = color; g.fillText(text, w / 2, 32);
   const tex = new THREE.CanvasTexture(c);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  s.scale.set(2.4 * scale, 1.2 * scale, 1);
+  s.scale.set(2.4 * scale * (w / 128), 1.2 * scale, 1);
   s.renderOrder = 10;
+  return s;
+}
+
+/** Module glass: cell grid with busbars, tinted (blue, or the heatmap colour). Cached per tint. */
+const panelTexCache = new Map<string, THREE.CanvasTexture>();
+function panelTexture(color: string, longAlongV: boolean) {
+  const key = `${color}|${longAlongV}`;
+  const hit = panelTexCache.get(key);
+  if (hit) return hit;
+  const cols = longAlongV ? 6 : 12, rows = longAlongV ? 12 : 6;
+  const c = document.createElement("canvas");
+  c.width = cols * 24; c.height = rows * 24;
+  const g = c.getContext("2d")!;
+  // Slightly darker than the tint so modules read as solar glass, not a flat colour, under bright sun.
+  const base = new THREE.Color(color).multiplyScalar(0.8);
+  const dark = base.clone().multiplyScalar(0.5);
+  const grd = g.createLinearGradient(0, 0, c.width, c.height);
+  grd.addColorStop(0, `#${base.getHexString()}`);
+  grd.addColorStop(1, `#${dark.getHexString()}`);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, c.width, c.height);
+  g.strokeStyle = "rgba(226,232,240,0.75)";
+  g.lineWidth = 2;
+  for (let i = 0; i <= cols; i++) { g.beginPath(); g.moveTo(i * 24, 0); g.lineTo(i * 24, c.height); g.stroke(); }
+  for (let j = 0; j <= rows; j++) { g.beginPath(); g.moveTo(0, j * 24); g.lineTo(c.width, j * 24); g.stroke(); }
+  g.strokeStyle = "rgba(255,255,255,0.18)";
+  g.lineWidth = 1;
+  for (let i = 0; i < cols; i++) for (const f of [0.33, 0.66]) { g.beginPath(); g.moveTo(i * 24 + 24 * f, 0); g.lineTo(i * 24 + 24 * f, c.height); g.stroke(); }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  panelTexCache.set(key, tex);
+  return tex;
+}
+
+/** "Zone 1 · 15 Panels, 7.8 kW" label card. */
+function calloutSprite(title: string, sub: string, scale: number) {
+  const c = document.createElement("canvas");
+  c.width = 360; c.height = 120;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "rgba(13,148,136,0.92)";
+  g.strokeStyle = "#ffffff";
+  g.lineWidth = 4;
+  g.beginPath();
+  g.roundRect(4, 4, 352, 112, 14);
+  g.fill(); g.stroke();
+  g.fillStyle = "#ffffff";
+  g.textAlign = "center";
+  g.font = "bold 40px system-ui";
+  g.fillText(title, 180, 52);
+  g.font = "32px system-ui";
+  g.fillText(sub, 180, 96);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  s.scale.set(3 * scale, 1 * scale, 1);
+  s.renderOrder = 12;
   return s;
 }
 
@@ -142,7 +200,9 @@ function buildModel(design: DesignData, scene: Scene, colors: (string | null)[],
     }
   }
 
-  const blockMat = new THREE.MeshStandardMaterial({ color: 0xa8a29e, roughness: 0.8 });
+  // Obstructions stand out in red (they're what causes shading); water tanks in blue.
+  const blockMat = new THREE.MeshStandardMaterial({ color: 0xe5636f, roughness: 0.75 });
+  const tankMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.5 });
   const treeMat = new THREE.MeshStandardMaterial({ color: 0x2f7d32, roughness: 1 });
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423 });
   for (const b of design.blockers) {
@@ -160,7 +220,7 @@ function buildModel(design: DesignData, scene: Scene, colors: (string | null)[],
     }
     if (b.kind === "circle" && b.center) {
       const c = scene.proj.toLocal(b.center);
-      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(b.radius ?? 1, b.radius ?? 1, b.height, 24), blockMat);
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(b.radius ?? 1, b.radius ?? 1, b.height, 24), tankMat);
       cyl.position.copy(T(c.x, c.y, base + b.height / 2)); cyl.castShadow = cyl.receiveShadow = true; group.add(cyl);
       continue;
     }
@@ -178,7 +238,9 @@ function buildModel(design: DesignData, scene: Scene, colors: (string | null)[],
     const z = zoneById.get(p.zoneId)!;
     const U = TV(p.U).normalize(), N = TV(p.N).normalize();
     const V = new THREE.Vector3().crossVectors(U, N).normalize();
-    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(colors[i] ?? "#1e3a8a"), metalness: 0.35, roughness: 0.35 });
+    // Box faces: +x, -x, +y (glass), -y, +z, -z. The glass gets a cell-grid texture.
+    const glass = new THREE.MeshStandardMaterial({ map: panelTexture(colors[i] ?? "#1e3a8a", p.longAlongV), metalness: 0.05, roughness: 0.65 });
+    const mat = [frameMat, frameMat, glass, frameMat, frameMat, frameMat];
     const panel = new THREE.Mesh(new THREE.BoxGeometry(p.w - 0.01, 0.04, p.l - 0.01), mat);
     const m = new THREE.Matrix4().makeBasis(U, N, V);
     panel.quaternion.setFromRotationMatrix(m);
@@ -186,11 +248,6 @@ function buildModel(design: DesignData, scene: Scene, colors: (string | null)[],
     panel.position.copy(ctr);
     panel.castShadow = panel.receiveShadow = true;
     group.add(panel);
-    if (showPanelInfo) {
-      // Cell grid lines for a realistic module look.
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(panel.geometry), new THREE.LineBasicMaterial({ color: 0xcbd5e1 }));
-      edges.quaternion.copy(panel.quaternion); edges.position.copy(ctr); group.add(edges);
-    }
     // Mounting legs from roof to each module corner (flat RCC & shed structures).
     if (z.type !== "tilted" && z.mountHeight > 0.05) {
       const poly = z.points.map(scene.proj.toLocal);
@@ -213,6 +270,22 @@ function buildModel(design: DesignData, scene: Scene, colors: (string | null)[],
       }
     }
   });
+  // Zone callouts floating above each roof, with a leader line down to it.
+  if (showPanelInfo) {
+    for (const zRaw of design.zones) {
+      const st = scene.zoneStats.find((x) => x.zoneId === zRaw.id);
+      const poly = zRaw.points.map(scene.proj.toLocal);
+      if (!st || poly.length < 3) continue;
+      const cx = poly.reduce((a, q) => a + q.x, 0) / poly.length, cy = poly.reduce((a, q) => a + q.y, 0) / poly.length;
+      const ext = Math.max(4, ...poly.map((q) => Math.hypot(q.x - cx, q.y - cy)));
+      const top = zRaw.height + 2.5 + ext * 0.6;
+      const label = calloutSprite(zRaw.name, `${st.panelCount} Panels, ${st.kw.toFixed(1)} kW`, Math.max(1.4, ext * 0.35));
+      label.position.copy(T(cx, cy, top));
+      group.add(label);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([T(cx, cy, zRaw.height + 0.5), T(cx, cy, top - 0.4)]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+      group.add(line);
+    }
+  }
   return group;
 }
 
@@ -315,6 +388,13 @@ export default function View3D(props: View3DProps) {
     s.scene3.add(s.model);
   };
 
+  useEffect(() => {
+    const s = st.current;
+    if (!s) return;
+    s.controls.autoRotate = !!props.autoRotate;
+    s.controls.autoRotateSpeed = 1.2;
+  }, [props.autoRotate]);
+
   // Model rebuild on design / colour changes.
   useEffect(() => {
     rebuildModel();
@@ -373,7 +453,7 @@ export default function View3D(props: View3DProps) {
           if (sp.elevation > -0.5) pts.push(s.target.clone().add(dir(sp.azimuth, Math.max(0, sp.elevation)).multiplyScalar(R)));
           if (labels && Math.abs(h - Math.round(h)) < 1e-6 && sp.elevation > 2) {
             const lp = s.target.clone().add(dir(sp.azimuth, sp.elevation).multiplyScalar(R));
-            const label = textSprite(String(Math.round(h) > 12 ? Math.round(h) - 12 : Math.round(h)), "#fde047", R / 45);
+            const label = textSprite(String(Math.round(h)), "#fde047", R / 45);
             label.position.copy(lp.clone().add(new THREE.Vector3(0, R * 0.04, 0)));
             g.add(label);
             const dot = new THREE.Mesh(new THREE.SphereGeometry(R * 0.008, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfde047 }));
@@ -385,6 +465,21 @@ export default function View3D(props: View3DProps) {
       arc(5, 21, 0x93c5fd, 0.55, false); // June solstice
       arc(11, 21, 0x93c5fd, 0.55, false); // December solstice
       arc(month, day, 0xfde047, 1, true);
+      // Sunrise / sunset times at the two ends of today's arc (site-local clock, minute precision).
+      let rise: number | null = null, set: number | null = null;
+      for (let mnt = 4 * 60; mnt <= 20 * 60; mnt++) {
+        const up = sunPosition(siteDate(2025, month, day, mnt / 60, lng), lat, lng).elevation > 0;
+        if (up && rise === null) rise = mnt;
+        if (up) set = mnt;
+      }
+      for (const mnt of [rise, set]) {
+        if (mnt === null) continue;
+        const sp = sunPosition(siteDate(2025, month, day, mnt / 60, lng), lat, lng);
+        const hhmm = `${String(Math.floor(mnt / 60)).padStart(2, "0")}:${String(mnt % 60).padStart(2, "0")}`;
+        const lbl = textSprite(hhmm, "#fef3c7", R / 55);
+        lbl.position.copy(s.target.clone().add(dir(sp.azimuth, 0).multiplyScalar(R * 1.02)).add(new THREE.Vector3(0, -R * 0.03, 0)));
+        g.add(lbl);
+      }
       // Compass ring on the roof plane.
       const ring: THREE.Vector3[] = [];
       for (let a = 0; a <= 360; a += 5) ring.push(s.target.clone().add(dir(a, 0).multiplyScalar(R)));

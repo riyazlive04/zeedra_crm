@@ -50,10 +50,16 @@ export function defaultModules(role: RoleName): string[] {
   return MODULES.filter((m) => m.defaultFor === "all" || m.defaultFor.includes(role)).map((m) => m.key);
 }
 
-export function effectiveModules(role: RoleName, custom: unknown): string[] {
+/**
+ * Modules a user can open: their own ticked set, else their company-defined role's set, else the
+ * built-in role's defaults.
+ */
+export function effectiveModules(role: RoleName, custom: unknown, customRoleModules?: unknown): string[] {
   // The owner can never lock themself out.
   if (role === "OWNER") return MODULE_KEYS;
-  if (Array.isArray(custom)) return custom.filter((k): k is string => typeof k === "string" && MODULE_KEYS.includes(k));
+  const pick = (v: unknown) => (v as unknown[]).filter((k): k is string => typeof k === "string" && MODULE_KEYS.includes(k));
+  if (Array.isArray(custom)) return pick(custom);
+  if (Array.isArray(customRoleModules)) return pick(customRoleModules);
   return defaultModules(role);
 }
 
