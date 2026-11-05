@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
   LayoutDashboard, Users, KanbanSquare, CalendarDays, Smartphone, FileText, MessageCircle, MapPinned, Hammer, Workflow,
-  Calculator, Settings, Bell, Sun, Gauge, GitFork, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
+  Calculator, Settings, Bell, Sun, Gauge, GitFork, Shield, Search, Menu, X, LogOut, CheckSquare, Plus, UserCircle2, ArrowLeft, BookOpen,
 } from "lucide-react";
 import { Avatar } from "./ui";
 import { api } from "@/lib/client";
@@ -51,6 +51,8 @@ export function AppShell({
   perms,
   unread: initialUnread,
   trialBanner,
+  impersonating,
+  platformAdmin,
   children,
 }: {
   user: { name: string; email: string; role: string; avatarColor: string; roleLabel: string };
@@ -58,6 +60,10 @@ export function AppShell({
   perms: NavPerms;
   unread: number;
   trialBanner?: { tone: "ending" | "expired"; text: string } | null;
+  /** Set while a platform admin is viewing this workspace ("View as"). */
+  impersonating?: { adminName: string } | null;
+  /** The signed-in user can open the platform console. */
+  platformAdmin?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -279,6 +285,11 @@ export function AppShell({
                   <Link href="/help" className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50" onClick={() => setMenuOpen(false)}>
                     <BookOpen className="h-4 w-4" /> Help & guide
                   </Link>
+                  {platformAdmin && (
+                    <Link href="/platform" className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50" onClick={() => setMenuOpen(false)}>
+                      <Shield className="h-4 w-4" /> Platform console
+                    </Link>
+                  )}
                   <button onClick={logout} className="flex w-full items-center gap-2 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50">
                     <LogOut className="h-4 w-4" /> Sign out
                   </button>
@@ -287,7 +298,21 @@ export function AppShell({
             </div>
           </div>
         </header>
-        {trialBanner && (
+        {impersonating && (
+          <div className="no-print flex flex-wrap items-center justify-center gap-3 bg-amber-400 px-4 py-2 text-center text-xs font-semibold text-ink-950">
+            <span>You&apos;re viewing {orgName} as its owner ({impersonating.adminName}, platform support). Changes you make are real.</span>
+            <button
+              onClick={async () => {
+                const r = await api<{ home: string }>("/api/platform/impersonate/exit", { body: {} }).catch(() => null);
+                window.location.href = r?.home ?? "/login";
+              }}
+              className="rounded-md bg-ink-950 px-3 py-1 text-white hover:bg-ink-900"
+            >
+              Return to platform
+            </button>
+          </div>
+        )}
+        {trialBanner && !impersonating && (
           <Link
             href="/settings?tab=billing"
             className={clsx(

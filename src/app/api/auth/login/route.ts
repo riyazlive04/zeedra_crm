@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     const ok = await verifyPassword(password, user?.passwordHash ?? (await (dummyHash ??= hashPassword("timing-equaliser"))));
     if (!user || !ok) throw new ApiError(401, "Incorrect email or password");
     if (!user.active) throw new ApiError(403, "Your account is deactivated. Contact your administrator.");
+    const orgState = await db.organization.findUnique({ where: { id: user.organizationId }, select: { suspendedAt: true } });
+    if (orgState?.suspendedAt) throw new ApiError(403, "Your company's account is suspended. Please contact support.");
 
     await createSessionCookie({ userId: user.id, orgId: user.organizationId, role: user.role, name: user.name, email: user.email });
     await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });

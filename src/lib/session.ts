@@ -14,6 +14,8 @@ export interface Session {
   email: string;
   /** Effective module keys and permissions (from the DB, per request). */
   modules?: string[];
+  /** Set while a platform admin is viewing the app as this user ("View as" support). */
+  imp?: { adminId: string; adminName: string };
   perms?: import("./rbac").Permission[];
 }
 
@@ -26,12 +28,15 @@ function secretKey(): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
+/** Support ("View as") sessions are short-lived. */
+export const IMPERSONATION_TTL_SECONDS = 2 * 60 * 60;
+
 export async function signSession(s: Session): Promise<string> {
-  return new SignJWT({ org: s.orgId, role: s.role, name: s.name, email: s.email })
+  return new SignJWT({ org: s.orgId, role: s.role, name: s.name, email: s.email, ...(s.imp ? { imp: s.imp } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(s.userId)
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+    .setExpirationTime(`${s.imp ? IMPERSONATION_TTL_SECONDS : SESSION_TTL_SECONDS}s`)
     .sign(secretKey());
 }
 
@@ -46,6 +51,7 @@ export async function verifySession(token: string | undefined | null): Promise<S
       role: payload.role as RoleName,
       name: String(payload.name ?? ""),
       email: String(payload.email ?? ""),
+      ...(payload.imp && typeof payload.imp === "object" ? { imp: payload.imp as { adminId: string; adminName: string } } : {}),
     };
   } catch {
     return null;

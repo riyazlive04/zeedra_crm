@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession, verifySession, type Session } from "./session";
+import { IMPERSONATION_TTL_SECONDS, SESSION_COOKIE, SESSION_TTL_SECONDS, signSession, verifySession, type Session } from "./session";
 import { can, type Permission } from "./rbac";
 import { ApiError } from "./errors";
 
@@ -32,7 +32,7 @@ export async function createSessionCookie(s: Session) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: s.imp ? IMPERSONATION_TTL_SECONDS : SESSION_TTL_SECONDS,
   });
 }
 
@@ -48,7 +48,7 @@ export async function clearSessionCookie() {
 export const getActiveUser = cache((userId: string) =>
   db.user.findUnique({
     where: { id: userId },
-    select: { active: true, role: true, name: true, email: true, avatarColor: true, organizationId: true, modules: true, customRole: { select: { name: true, modules: true } } },
+    select: { active: true, role: true, name: true, email: true, avatarColor: true, organizationId: true, modules: true, customRole: { select: { name: true, modules: true } }, organization: { select: { suspendedAt: true } } },
   }),
 );
 
@@ -58,6 +58,8 @@ export async function requirePageSession(permission?: Permission): Promise<Sessi
   if (!s) redirect("/login");
   const user = await getActiveUser(s.userId);
   if (!user?.active) redirect("/login?error=inactive");
+  // A suspended company is locked out, except for a platform admin viewing it for support.
+  if (user.organization?.suspendedAt && !s.imp) redirect("/login?error=suspended");
   // Role and name come from the DB so profile edits and role changes apply without re-login.
   const modules = effectiveModules(user.role, user.modules, user.customRole?.modules);
   const session: Session = { ...s, role: user.role, name: user.name, modules, perms: effectivePermissions(user.role, modules) };
@@ -71,6 +73,7 @@ export async function requireApiSession(permission?: Permission): Promise<Sessio
   if (!s) throw new ApiError(401, "Not signed in");
   const user = await getActiveUser(s.userId);
   if (!user?.active || user.organizationId !== s.orgId) throw new ApiError(401, "Session no longer valid");
+  if (user.organization?.suspendedAt && !s.imp) throw new ApiError(403, "This account is suspended. Please contact support.");
   const modules = effectiveModules(user.role, user.modules, user.customRole?.modules);
   const session: Session = { ...s, role: user.role, name: user.name, modules, perms: effectivePermissions(user.role, modules) };
   if (permission && !can(session, permission)) throw new ApiError(403, "You don't have access to this. Ask your admin to enable the module for you.");

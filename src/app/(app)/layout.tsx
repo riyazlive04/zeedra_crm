@@ -6,6 +6,7 @@ import { billingState } from "@/lib/billing/plans";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { MODULE_KEYS, homeFor, moduleForPath } from "@/lib/modules";
+import { platformAdminEmails } from "@/lib/platform";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requirePageSession();
@@ -39,7 +40,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         : null;
 
   return (
-    <AppShell user={{ ...user, roleLabel: ROLE_LABEL[user.role] }} orgName={org.name} perms={perms} unread={unread} trialBanner={trialBanner}>
+    <AppShell user={{ ...user, roleLabel: ROLE_LABEL[user.role] }} orgName={org.name} perms={perms} unread={unread} trialBanner={trialBanner}
+      impersonating={session.imp ? { adminName: session.imp.adminName } : null}
+      platformAdmin={!session.imp && platformAdminEmails().includes(user.email.toLowerCase())}
+    >
       {children}
     </AppShell>
   );

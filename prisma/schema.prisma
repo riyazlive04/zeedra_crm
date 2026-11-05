@@ -26,6 +26,9 @@ model Organization {
   billingStatus   String    @default("TRIALING") // TRIALING | ACTIVE | CANCELED
   trialEndsAt     DateTime?
   subscribedAt    DateTime?
+  /// Set by the platform team: everyone in a suspended company is signed out and can't sign in.
+  suspendedAt     DateTime?
+  suspendedReason String?
   apiKey    String   @unique // lead-capture webhook key (x-api-key)
   settings  Json // OrgSettings — pricing, tariff, subsidy, geofence, qualification thresholds
   // WhatsApp Cloud API credentials (per tenant)

@@ -29,7 +29,7 @@ export function LoginForm({ showDemo = false }: { showDemo?: boolean }) {
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(params.get("error") === "inactive" ? "Your account is deactivated." : null);
+  const [error, setError] = useState<string | null>(params.get("error") === "inactive" ? "Your account is deactivated." : params.get("error") === "suspended" ? "Your company's account is suspended. Please contact support." : null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
