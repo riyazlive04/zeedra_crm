@@ -1,6 +1,6 @@
 import type { DesignData, PanelGeom, Scene } from "@/lib/solar/shading";
 
-export type Tool = "select" | "zone" | "rect" | "polygon" | "circle" | "tree" | "inverter" | "string";
+export type Tool = "select" | "zone" | "rect" | "polygon" | "circle" | "tree" | "inverter" | "string" | "addPanel";
 
 export type Selection = { type: "zone" | "blocker"; id: string } | null;
 
@@ -13,6 +13,7 @@ export function wiringOrder(scene: Scene, design: DesignData): string[] {
     const ps = scene.panels.filter((p) => p.zoneId === z.id && !p.removed);
     const rows = new Map<number, PanelGeom[]>();
     for (const p of ps) {
+      if (p.free) continue;
       const [r] = p.key.split(":").map(Number);
       rows.set(r, [...(rows.get(r) ?? []), p]);
     }
@@ -20,6 +21,14 @@ export function wiringOrder(scene: Scene, design: DesignData): string[] {
       const row = rows.get(r)!.sort((a, b) => Number(a.key.split(":")[1]) - Number(b.key.split(":")[1]));
       (i % 2 ? row.reverse() : row).forEach((p) => out.push(panelId(p)));
     });
+    // Hand-placed modules go last, nearest-neighbour from the end of the grid to keep cable short.
+    const free = ps.filter((p) => p.free);
+    let last = ps.find((p) => panelId(p) === out[out.length - 1]) ?? free[0];
+    while (free.length) {
+      free.sort((a, b) => Math.hypot(a.center.x - last.center.x, a.center.y - last.center.y) - Math.hypot(b.center.x - last.center.x, b.center.y - last.center.y));
+      last = free.shift()!;
+      out.push(panelId(last));
+    }
   }
   return out;
 }

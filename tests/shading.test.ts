@@ -138,3 +138,61 @@ describe("weather calibration", () => {
     expect(r.shadingLossPct).toBeLessThan(clear.shadingLossPct);
   });
 });
+
+describe("panel placement controls", () => {
+  /** A 12 m × 8 m roof turned 15° clockwise from north. */
+  function rotatedRoof(d: DesignData) {
+    const proj = makeProjection(d.center);
+    const a = (15 * Math.PI) / 180;
+    const rot = (x: number, y: number) => ({ x: x * Math.cos(a) + y * Math.sin(a), y: -x * Math.sin(a) + y * Math.cos(a) });
+    return [rot(-6, -4), rot(6, -4), rot(6, 4), rot(-6, 4)].map(proj.toLatLng);
+  }
+
+  it("lines panels up with a turned roof", () => {
+    const d = emptyDesign(CHENNAI);
+    d.zones.push({ ...defaultZone("z1", "Roof", rotatedRoof(d), CHENNAI.lat), parapetHeight: 0 });
+    const scene = buildScene(d);
+    expect(scene.panels.length).toBeGreaterThan(6);
+    // Row direction (U) parallel to the roof's long edge, which runs at 105° (bearing) after the turn.
+    const p = scene.panels[0];
+    const bearing = ((Math.atan2(p.U.x, p.U.y) * 180) / Math.PI + 360) % 180;
+    expect(Math.abs(bearing - 105)).toBeLessThan(0.5);
+    // A zone with alignment off keeps due south and fits fewer panels on the turned roof.
+    const off = emptyDesign(CHENNAI);
+    off.zones.push({ ...defaultZone("z1", "Roof", rotatedRoof(off), CHENNAI.lat), parapetHeight: 0, alignToRoof: false });
+    expect(buildScene(off).panels.length).toBeLessThanOrEqual(scene.panels.length);
+  });
+
+  it("moves the array by the user's shift", () => {
+    const d = emptyDesign(CHENNAI);
+    d.zones.push({ ...defaultZone("z1", "Roof", squareRoof(d, 12), CHENNAI.lat), parapetHeight: 0, shift: { u: 0, w: 0 } });
+    const a = buildScene(d).panels[0].center;
+    d.zones[0] = { ...d.zones[0], shift: { u: 0.3, w: 0 } };
+    const b = buildScene(d).panels[0].center;
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(0.3, 1);
+  });
+
+  it("places hand-placed panels and flags clashes", () => {
+    const d = emptyDesign(CHENNAI);
+    d.zones.push({ ...defaultZone("z1", "Roof", squareRoof(d, 12), CHENNAI.lat), parapetHeight: 0 });
+    const proj = makeProjection(d.center);
+    d.freePanels = [
+      { id: "a", zoneId: "z1", center: proj.toLatLng({ x: 0, y: 0 }), rotation: 0, orientation: "portrait" },
+      { id: "b", zoneId: "z1", center: proj.toLatLng({ x: 20, y: 0 }), rotation: 30, orientation: "landscape" },
+    ];
+    const free = buildScene(d).panels.filter((p) => p.free);
+    expect(free).toHaveLength(2);
+    expect(free[1].clash).toBe("Outside the roof");
+    // "a" sits in the middle of the auto grid, so it overlaps a grid module.
+    expect(free[0].clash).toBe("Overlaps another module");
+  });
+
+  it("uses each zone's own module for kW", () => {
+    const d = emptyDesign(CHENNAI);
+    d.zones.push({ ...defaultZone("z1", "Roof", squareRoof(d, 12), CHENNAI.lat), parapetHeight: 0, module: { name: "335 W", watt: 335, length: 1.956, width: 0.992 } });
+    const scene = buildScene(d);
+    const st = scene.zoneStats[0];
+    expect(st.kw).toBeCloseTo((st.panelCount * 335) / 1000, 5);
+    expect(scene.panels.every((p) => p.watt === 335)).toBe(true);
+  });
+});

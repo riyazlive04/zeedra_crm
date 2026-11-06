@@ -11,6 +11,12 @@ Plain-English guides to using Zeedra Solar CRM, one per role, with real screensh
 | Field Sales | [field-sales.md](field-sales.md) | [field-sales.pdf](pdf/field-sales.pdf) |
 | Installer | [installer.md](installer.md) | [installer.pdf](pdf/installer.pdf) |
 
+**Feature guides**
+
+| Feature | Read online | Download PDF |
+|---|---|---|
+| Roof Design & Shading | [roof-design.md](roof-design.md) | [roof-design.pdf](pdf/roof-design.pdf) |
+
 The app also has a built-in version of this guide. Any signed-in user can open **Help & guide** from the left sidebar (or from the person icon in the top right) to see the same content for their own role, without leaving the app.
 
 ## About the screenshots

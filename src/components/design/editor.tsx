@@ -6,11 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   ArrowLeft, Box, ChevronDown, Copy, Download, ExternalLink, Grid3x3, Map as MapIcon, MousePointer2, Pencil, Plane, Plus, Redo2,
-  Save, Share2, Sun, Trash2, Undo2, X, Zap, Cable, LayoutGrid, HelpCircle, Check, AlertTriangle, Loader2,
+  Save, Share2, Sun, Trash2, Undo2, X, Zap, Cable, LayoutGrid, HelpCircle, Check, AlertTriangle, Loader2, SquarePlus,
 } from "lucide-react";
 import {
   accessColor, annualAnalysis, buildScene, defaultZone, designSummary, instantShading, pointInPolygon, polygonArea, shadowPolygons, siteDate,
-  effectiveZone, type AnalysisResult, type Blocker, type BlockerKind, type DesignData, type LatLng, type Zone, type ZoneType,
+  effectiveZone, type AnalysisResult, type Blocker, type BlockerKind, type DesignData, type FreePanel, type LatLng, type Zone, type ZoneType,
 } from "@/lib/solar/shading";
 import {
   autoString, checkString, dcVoltageDrop, acVoltageDrop, findInverter, findModule, INVERTERS, MODULES, pickCable, stringLimits, suggestInverter,
@@ -149,7 +149,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
 
   const scene = useMemo(() => buildScene(design), [design]);
   const summary = useMemo(() => designSummary(design, scene), [design, scene]);
-  const geomKey = useMemo(() => JSON.stringify([design.zones, design.blockers, design.module, design.performanceRatio, climate?.ghiMonthly]), [design.zones, design.blockers, design.module, design.performanceRatio, climate]);
+  const geomKey = useMemo(() => JSON.stringify([design.zones, design.blockers, design.module, design.freePanels, design.performanceRatio, climate?.ghiMonthly]), [design.zones, design.blockers, design.module, design.freePanels, design.performanceRatio, climate]);
   const fresh = analysis && analysis.key === geomKey ? analysis.result : null;
   const customMods = design.customModules ?? [];
   const customInvs = design.customInverters ?? [];
@@ -330,6 +330,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
       setActiveString((a) => (a ? (a.includes(pid) ? a.filter((x) => x !== pid) : [...a, pid]) : [pid]));
       return;
     }
+    if (pid.includes("|free:")) return removeFree(pid);
     const [zoneId, key] = pid.split("|");
     update((d) => ({
       ...d,
@@ -338,24 +339,80 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
     }));
   };
 
+  // ── Module per zone
+  const [moduleTarget, setModuleTarget] = useState<string | null>(null); // zone id, or null = whole design
+  const moduleOfZone = (zoneId: string): ModuleModel => {
+    const z = design.zones.find((x) => x.id === zoneId);
+    if (!z?.module) return moduleModel;
+    return findModule(z.moduleId ?? undefined, customMods) ?? ({ ...moduleModel, id: `zone-${z.id}`, brand: "", model: z.module.name, watt: z.module.watt, length: z.module.length * 1000, width: z.module.width * 1000 } as ModuleModel);
+  };
+  const moduleOfPid = (pid: string) => moduleOfZone(pid.split("|")[0]);
+
+  // ── Moving panels
+  const zoneAxesFor = (zoneId: string) => {
+    const az = ((scene.zoneStats.find((x) => x.zoneId === zoneId)?.azimuth ?? 180) * Math.PI) / 180;
+    return { r: { x: Math.cos(az), y: -Math.sin(az) }, b: { x: -Math.sin(az), y: -Math.cos(az) } };
+  };
+  const nudgeArray = (zoneId: string, du: number, dw: number) => {
+    const st = scene.zoneStats.find((x) => x.zoneId === zoneId);
+    const z = design.zones.find((x) => x.id === zoneId);
+    const base = z?.shift ?? st?.shiftNow ?? { u: 0, w: 0 };
+    patchZone(zoneId, { shift: { u: Math.round((base.u + du) * 1000) / 1000, w: Math.round((base.w + dw) * 1000) / 1000 } });
+  };
+  const onArrayMove = (zoneId: string, from: LatLng, to: LatLng) => {
+    const a = scene.proj.toLocal(from), b2 = scene.proj.toLocal(to);
+    const dx = b2.x - a.x, dy = b2.y - a.y;
+    const { r, b } = zoneAxesFor(zoneId);
+    nudgeArray(zoneId, dx * r.x + dy * r.y, dx * b.x + dy * b.y);
+  };
+  /** Grid module → hand-placed module (keeps its place in a string). */
+  const detach = (d: DesignData, pid: string, patch: Partial<FreePanel>): DesignData => {
+    const [zoneId, key] = pid.split("|");
+    const zone = d.zones.find((z) => z.id === zoneId);
+    const geom = scene.panels.find((p) => panelId(p) === pid);
+    if (!zone || !geom) return d;
+    const fp: FreePanel = { id: uid("f"), zoneId, center: scene.proj.toLatLng(geom.center), rotation: 0, orientation: zone.orientation, ...patch };
+    const newPid = `${zoneId}|free:${fp.id}`;
+    return {
+      ...d,
+      zones: d.zones.map((z) => (z.id === zoneId ? { ...z, removed: [...z.removed.filter((k) => k !== key), key] } : z)),
+      freePanels: [...(d.freePanels ?? []), fp],
+      strings: (d.strings ?? []).map((st) => ({ ...st, panels: st.panels.map((x) => (x === pid ? newPid : x)) })),
+    };
+  };
+  const patchFree = (pid: string, patch: Partial<FreePanel>) => {
+    const id = pid.split("|free:")[1];
+    update((d) => (id ? { ...d, freePanels: (d.freePanels ?? []).map((f) => (f.id === id ? { ...f, ...patch } : f)) } : detach(d, pid, patch)));
+  };
+  const onPanelMove = (pid: string, center: LatLng) => patchFree(pid, { center });
+  const rotatePanel = (pid: string, how: "90" | "15") => {
+    const geom = scene.panels.find((p) => panelId(p) === pid);
+    if (!geom) return;
+    const id = pid.split("|free:")[1];
+    const fp = id ? (design.freePanels ?? []).find((f) => f.id === id) : null;
+    const orientation = fp?.orientation ?? design.zones.find((z) => z.id === geom.zoneId)?.orientation ?? "portrait";
+    const rotation = fp?.rotation ?? 0;
+    patchFree(pid, how === "90" ? { orientation: orientation === "portrait" ? "landscape" : "portrait" } : { rotation: (rotation + 15) % 360 });
+  };
+  const removeFree = (pid: string) => {
+    const id = pid.split("|free:")[1];
+    update((d) => ({
+      ...d,
+      freePanels: (d.freePanels ?? []).filter((f) => f.id !== id),
+      strings: (d.strings ?? []).map((st) => ({ ...st, panels: st.panels.filter((x) => x !== pid) })).filter((st) => st.panels.length),
+    }));
+  };
+  const onAddPanel = (at: LatLng) => {
+    const local = scene.proj.toLocal(at);
+    const zone = design.zones.find((z) => pointInPolygon(local, z.points.map(scene.proj.toLocal)));
+    if (!zone) return toast.error("Click inside a roof zone to place a panel");
+    update((d) => ({ ...d, freePanels: [...(d.freePanels ?? []), { id: uid("f"), zoneId: zone.id, center: at, rotation: 0, orientation: zone.orientation }] }));
+  };
+
   const fillZone = (id: string) => patchZone(id, { removed: [] });
   const clearZone = (id: string) => patchZone(id, { removed: scene.panels.filter((p) => p.zoneId === id).map((p) => p.key) });
-  const alignToEdge = (z: Zone) => {
-    // Face the roof edge whose outward normal is closest to the equator-facing direction.
-    const pts = z.points.map(scene.proj.toLocal);
-    const ideal = design.center.lat >= 0 ? 180 : 0;
-    let best = z.azimuth, bestDiff = 999;
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i], b = pts[(i + 1) % pts.length];
-      const edgeAz = (Math.atan2(b.x - a.x, b.y - a.y) * 180) / Math.PI;
-      for (const n of [edgeAz + 90, edgeAz - 90]) {
-        const az = ((n % 360) + 360) % 360;
-        const diff = Math.abs(((az - ideal + 540) % 360) - 180);
-        if (diff < bestDiff) { bestDiff = diff; best = Math.round(az); }
-      }
-    }
-    patchZone(z.id, z.type === "tilted" ? { roofAzimuth: best } : { azimuth: best });
-  };
+  // Line panels up with the roof (kept in sync as corners move; see roofAlignedAzimuth).
+  const alignToEdge = (z: Zone) => patchZone(z.id, { alignToRoof: true, shift: null });
 
   // ── Stringing
   const inverters = (design.inverters ?? []).map((inst) => ({ inst, model: findInverter(inst.modelId, customInvs) })).filter((x): x is { inst: typeof x.inst; model: InverterModel } => !!x.model);
@@ -367,9 +424,42 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
   const runAutoString = () => {
     const panels = order.filter((p) => activeIds.has(p));
     if (!panels.length) return toast.error("There are no modules to wire yet", "Draw a zone and fill it with panels first.");
+    // Different modules never share a string: with mixed modules, each type gets its own inverter(s).
+    const groups = new Map<string, { mod: ModuleModel; panels: string[] }>();
+    for (const pid of panels) {
+      const m = moduleOfPid(pid);
+      const g = groups.get(m.id) ?? { mod: m, panels: [] };
+      g.panels.push(pid);
+      groups.set(m.id, g);
+    }
+    if (groups.size > 1) {
+      const allInv: { inst: { id: string; modelId: string }; model: InverterModel }[] = [];
+      const allStrings: StringDef[] = [];
+      const left: string[] = [];
+      for (const g of groups.values()) {
+        const kwG = g.panels.length * g.mod.watt / 1000;
+        const sug = suggestInverter(kwG, kwG > 6 ? "three" : "single", [...customInvs, ...INVERTERS]);
+        if (!sug) { left.push(...g.panels); continue; }
+        let count = Math.max(1, Math.ceil(kwG / 1.3 / sug.acKw - 1e-9));
+        let plan = Array.from({ length: count }, () => ({ inst: { id: uid("i"), modelId: sug.id }, model: sug }));
+        while (autoString(g.panels, g.mod, plan, temps).unstrung.length > 0 && count < 8) {
+          count++;
+          plan = Array.from({ length: count }, () => ({ inst: { id: uid("i"), modelId: sug.id }, model: sug }));
+        }
+        const r = autoString(g.panels, g.mod, plan, temps);
+        allStrings.push(...r.strings.map((st) => ({ ...st, id: `S${allStrings.length + 1 + r.strings.indexOf(st)}`, inverterIndex: st.inverterIndex + allInv.length })));
+        allInv.push(...plan);
+        left.push(...r.unstrung);
+      }
+      update((d) => ({ ...d, inverters: allInv.map((x) => x.inst), strings: allStrings }));
+      if (left.length) toast.error(`${left.length} module(s) couldn't be wired`, "Remove them or add another inverter.");
+      else toast.success("Inverters sized and strings wired", `${groups.size} module types, each on its own inverter(s): ${allStrings.length} strings.`);
+      return;
+    }
+    const onlyMod = [...groups.values()][0].mod;
     const kw = summary.systemKw;
     const totalAc = (list: typeof inverters) => list.reduce((a, i) => a + i.model.acKw, 0);
-    const tryWith = (list: typeof inverters) => autoString(panels, moduleModel, list, temps);
+    const tryWith = (list: typeof inverters) => autoString(panels, onlyMod, list, temps);
     // The user's own inverters are kept if they can take the whole array without heavy clipping.
     const fitsAsIs = (list: typeof inverters) => list.length > 0 && totalAc(list) >= kw / 1.35 && tryWith(list).unstrung.length === 0;
 
@@ -478,8 +568,9 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
     : tool === "circle" || tool === "tree" ? "Click the centre, then click the edge to set the radius"
     : tool === "inverter" ? "Click where the inverter will be mounted"
     : tool === "string" ? "Click modules in wiring order · click again to remove · Finish in the Layout panel"
+    : tool === "addPanel" ? "Click inside a roof to place a module · drag it to adjust · Esc to stop"
     : design.zones.length === 0 ? 'Try creating a new zone by clicking on "Add Zone"'
-    : "Click an object to see its properties · Right-click = options · Click a module to remove/restore it";
+    : "Click an object for its properties · Drag a module to move it · Right-click a module to rotate it · Click a module to remove/restore it";
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white text-slate-800">
@@ -520,7 +611,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
               <ZoneProps
                 zone={selectedZone}
                 stats={scene.zoneStats.find((s) => s.zoneId === selectedZone.id)}
-                moduleLabel={`${moduleModel.brand} ${moduleModel.model}`.trim()}
+                moduleLabel={(() => { const m = moduleOfZone(selectedZone.id); return `${m.brand} ${m.model}`.trim(); })()}
                 units={units}
                 canEdit={canEdit}
                 onBack={() => setSelection(null)}
@@ -528,7 +619,10 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
                 onFill={() => fillZone(selectedZone.id)}
                 onClear={() => clearZone(selectedZone.id)}
                 onAlign={() => alignToEdge(selectedZone)}
-                onPickModule={() => setModal("module")}
+                onPickModule={() => { setModuleTarget(selectedZone.id); setModal("module"); }}
+                onNudge={(du, dw) => nudgeArray(selectedZone.id, du, dw)}
+                ownModule={!!selectedZone.module}
+                onResetModule={() => patchZone(selectedZone.id, { module: null, moduleId: null })}
                 onDelete={deleteSelection}
               />
             ) : (
@@ -625,6 +719,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
                     inverters={inverters}
                     strings={strings}
                     moduleModel={moduleModel}
+                    moduleFor={(st) => (st.panels[0] ? moduleOfPid(st.panels[0]) : moduleModel)}
                     temps={temps}
                     tempSource={design.temps ? "manual" : climate ? climate.source : "default"}
                     leftToString={leftToString}
@@ -670,6 +765,9 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
               onEditZonePoints={(id, pts) => patchZone(id, { points: pts })}
               onEditBlocker={patchBlocker}
               onPanelClick={onPanelClick}
+              onPanelMove={canEdit ? onPanelMove : undefined}
+              onArrayMove={canEdit ? onArrayMove : undefined}
+              onAddPanel={canEdit ? (at) => { onAddPanel(at); } : undefined}
               onPlaceInverter={(p) => { update((d) => ({ ...d, wiring: { acRunM: 15, dcSizeMm2: null, acSizeMm2: null, ...d.wiring, inverterAt: p } })); setTool("select"); }}
               onContext={(target, x, y) => canEdit && setMenu({ target, x, y })}
               onView={(center, zoom) => update((d) => (Math.abs(d.zoom - zoom) < 0.01 && d.zones.length ? d : { ...d, zoom, center: d.zones.length ? d.center : center }), false)}
@@ -743,6 +841,7 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
             <div className="absolute bottom-4 left-1/2 z-[500] flex -translate-x-1/2 items-center gap-1 rounded-xl bg-white px-2 py-1.5 shadow-xl">
               <ToolBtn active={tool === "select"} onClick={() => setTool("select")} title="Select"><MousePointer2 className="h-4 w-4" /></ToolBtn>
               <ToolBtn onClick={() => selectedZone ? fillZone(selectedZone.id) : toast.error("Select a zone first")} title="Fill selected zone with panels"><LayoutGrid className="h-4 w-4" /></ToolBtn>
+              <ToolBtn active={tool === "addPanel"} onClick={() => setTool(tool === "addPanel" ? "select" : "addPanel")} title="Add panel: click to place a single module"><SquarePlus className="h-4 w-4" /></ToolBtn>
               <ToolBtn onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)"><Undo2 className="h-4 w-4" /></ToolBtn>
               <ToolBtn onClick={redo} disabled={!future.length} title="Redo (Ctrl+Y)"><Redo2 className="h-4 w-4" /></ToolBtn>
               <ToolBtn active={tool === "zone"} onClick={() => { setPendingZoneType("flat"); setTool("zone"); }} title="Draw zone"><Pencil className="h-4 w-4" /></ToolBtn>
@@ -756,7 +855,11 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
               <div className="fixed inset-0 z-[600]" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
               <div className="fixed z-[601] w-44 rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-xl" style={{ left: menu.x, top: menu.y }}>
                 {menu.target.type === "panel" ? (
-                  <MenuItem onClick={() => menuAction("toggle")}>Remove / restore module</MenuItem>
+                  <>
+                    <MenuItem onClick={() => { rotatePanel(menu.target.id, "90"); setMenu(null); }}>Rotate 90°</MenuItem>
+                    <MenuItem onClick={() => { rotatePanel(menu.target.id, "15"); setMenu(null); }}>Turn 15°</MenuItem>
+                    <MenuItem onClick={() => menuAction("toggle")} danger>{menu.target.id.includes("|free:") ? "Delete module" : "Remove / restore module"}</MenuItem>
+                  </>
                 ) : (
                   <>
                     <MenuItem onClick={() => menuAction("props")}>Properties</MenuItem>
@@ -785,7 +888,15 @@ export function DesignEditor({ init, canEdit }: { init: EditorInit; canEdit: boo
         <ModulePicker
           custom={customMods}
           current={design.moduleId}
-          onPick={(m) => { update((d) => ({ ...d, moduleId: m.id, module: { name: `${m.brand} ${m.model}`, watt: m.watt, length: m.length / 1000, width: m.width / 1000 } })); setModal(null); }}
+          onPick={(m) => {
+            const spec = { name: `${m.brand} ${m.model}`, watt: m.watt, length: m.length / 1000, width: m.width / 1000 };
+            if (moduleTarget && design.zones.some((z) => z.id === moduleTarget)) {
+              // A zone with its own module; picking the design's module simply clears the override.
+              patchZone(moduleTarget, m.id === design.moduleId ? { module: null, moduleId: null } : { module: spec, moduleId: m.id });
+            } else update((d) => ({ ...d, moduleId: m.id, module: spec }));
+            setModuleTarget(null);
+            setModal(null);
+          }}
           onAddCustom={(m) => update((d) => ({ ...d, customModules: [...(d.customModules ?? []), m] }))}
           onClose={() => setModal(null)}
         />
@@ -872,10 +983,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <div className="border-b border-slate-100 px-4 py-3"><h5 className="mb-1 text-sm font-semibold text-slate-800">{title}</h5>{children}</div>;
 }
 
-function ZoneProps({ zone, stats, moduleLabel, units, canEdit, onBack, onChange, onFill, onClear, onAlign, onPickModule, onDelete }: {
-  zone: Zone; stats?: { areaM2: number; panelCount: number; kw: number; rowGap: number }; moduleLabel: string; units: "m" | "ft"; canEdit: boolean;
+function ZoneProps({ zone, stats, moduleLabel, units, canEdit, onBack, onChange, onFill, onClear, onAlign, onPickModule, onDelete, onNudge, ownModule, onResetModule }: {
+  zone: Zone; stats?: { areaM2: number; panelCount: number; kw: number; rowGap: number; azimuth: number; shiftNow: { u: number; w: number } }; moduleLabel: string; units: "m" | "ft"; canEdit: boolean;
   onBack: () => void; onChange: (p: Partial<Zone>) => void; onFill: () => void; onClear: () => void; onAlign: () => void; onPickModule: () => void; onDelete: () => void;
+  onNudge: (du: number, dw: number) => void; ownModule: boolean; onResetModule: () => void;
 }) {
+  const dirNow = Math.round((stats?.azimuth ?? (zone.type === "tilted" ? zone.roofAzimuth : zone.azimuth)) * 10) / 10;
+  const setDir = (v: number) => {
+    const az = Math.round((((v % 360) + 360) % 360) * 10) / 10;
+    onChange(zone.type === "tilted" ? { roofAzimuth: az, alignToRoof: false } : { azimuth: az, alignToRoof: false });
+  };
+  const compass = (a: number) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round((((a % 360) + 360) % 360) / 45) % 8];
   const eff = effectiveZone(zone);
   const [editingName, setEditingName] = useState(false);
   return (
@@ -901,8 +1019,7 @@ function ZoneProps({ zone, stats, moduleLabel, units, canEdit, onBack, onChange,
       {zone.type === "tilted" && (
         <Section title="Tilted Roof">
           <NumField label="Tilt" value={zone.roofTilt} onChange={(v) => onChange({ roofTilt: Math.max(0, Math.min(60, v)) })} unit="°" step={1} />
-          <NumField label="Azimuth" value={zone.roofAzimuth} onChange={(v) => onChange({ roofAzimuth: ((v % 360) + 360) % 360 })} unit="°" step={1} />
-          <p className="text-xs text-slate-400">Direction the slope faces (180° = south).</p>
+          <p className="text-xs text-slate-400">The slope&apos;s direction is set in <b>Panel direction</b> below.</p>
         </Section>
       )}
       <Section title="Zone">
@@ -910,10 +1027,43 @@ function ZoneProps({ zone, stats, moduleLabel, units, canEdit, onBack, onChange,
         {zone.type !== "tilted" && <NumField label="Parapet height" value={zone.parapetHeight} onChange={(v) => onChange({ parapetHeight: Math.max(0, v) })} unit="m" />}
         <div className="flex justify-between py-1 text-sm text-slate-500"><span>Area</span><span>{fmtArea(stats?.areaM2 ?? 0, units)}</span></div>
       </Section>
+      <Section title="Panel direction">
+        <label className="flex items-start gap-2 py-1 text-sm text-slate-600">
+          <input type="checkbox" className="mt-1" checked={!!zone.alignToRoof} onChange={(e) => (e.target.checked ? onAlign() : onChange({ alignToRoof: false }))} />
+          <span>Line up with the roof<span className="block text-xs text-slate-400">Panels run parallel to the roof edges and follow them when you move a corner.</span></span>
+        </label>
+        <div className="mt-1 flex items-center gap-2">
+          <input type="range" min={0} max={359} step={1} value={dirNow} onChange={(e) => setDir(Number(e.target.value))} className="sun-range w-full" aria-label="Panel direction" />
+          <span className="w-20 text-right text-sm font-semibold tabular-nums text-slate-700">{dirNow}° {compass(dirNow)}</span>
+        </div>
+        <div className="mt-1.5 grid grid-cols-4 gap-1">
+          {[-5, -1, 1, 5].map((d) => (
+            <button type="button" key={d} onClick={() => setDir(dirNow + d)} className="rounded-md border border-slate-200 py-1 text-xs font-medium hover:bg-slate-50">{d > 0 ? `+${d}` : d}°</button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">Direction the panels face (180° = south). {zone.type === "tilted" ? "On a tilted roof this is the slope's direction." : ""}</p>
+      </Section>
+      <Section title="Array position">
+        <div className="flex items-start gap-3">
+          <div className="grid shrink-0 grid-cols-[32px_32px_32px] gap-1">
+            <span />
+            <button type="button" title="Move up the slope 10 cm" onClick={() => onNudge(0, 0.1)} className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 hover:bg-slate-50">▲</button>
+            <span />
+            <button type="button" title="Move along the row 10 cm" onClick={() => onNudge(-0.1, 0)} className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 hover:bg-slate-50">◀</button>
+            <button type="button" title="Back to automatic best fit" onClick={() => onChange({ shift: null })} className={clsx("grid h-8 w-8 place-items-center rounded-md border text-[10px] font-semibold", zone.shift ? "border-slate-200 hover:bg-slate-50" : "border-teal-500 bg-teal-50 text-teal-700")}>Auto</button>
+            <button type="button" title="Move along the row 10 cm" onClick={() => onNudge(0.1, 0)} className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 hover:bg-slate-50">▶</button>
+            <span />
+            <button type="button" title="Move down the slope 10 cm" onClick={() => onNudge(0, -0.1)} className="grid h-8 w-8 place-items-center rounded-md border border-slate-200 hover:bg-slate-50">▼</button>
+            <span />
+          </div>
+          <p className="text-xs text-slate-500">Nudge the whole array 10 cm at a time, or drag the blue handle on the map. <b>Auto</b> picks the position that fits the most panels.</p>
+        </div>
+      </Section>
       <Section title="Panels">
-        <button type="button" onClick={onPickModule} className="mb-2 w-full rounded-md border border-slate-200 px-2 py-1.5 text-left text-xs hover:bg-slate-50">
-          <span className="block text-slate-400">Module</span><span className="font-medium text-slate-700">{moduleLabel}</span>
+        <button type="button" onClick={onPickModule} className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-left text-xs hover:bg-slate-50">
+          <span className="block text-slate-400">Module {ownModule ? "(this zone only)" : "(same as the design)"}</span><span className="font-medium text-slate-700">{moduleLabel}</span>
         </button>
+        {ownModule && <button type="button" onClick={onResetModule} className="mb-2 text-xs font-medium text-teal-700 hover:underline">Use the design&apos;s module</button>}
         <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-0.5 text-xs">
           {(["portrait", "landscape"] as const).map((o) => (
             <button type="button" key={o} onClick={() => onChange({ orientation: o })} className={clsx("rounded-md py-1 capitalize", zone.orientation === o ? "bg-white font-semibold shadow-sm" : "text-slate-500")}>{o}</button>
@@ -922,7 +1072,6 @@ function ZoneProps({ zone, stats, moduleLabel, units, canEdit, onBack, onChange,
         {zone.type !== "tilted" && (
           <>
             <NumField label="Panel tilt" value={zone.tilt} onChange={(v) => onChange({ tilt: Math.max(0, Math.min(60, v)) })} unit="°" step={1} />
-            <NumField label="Panel azimuth" value={zone.azimuth} onChange={(v) => onChange({ azimuth: ((v % 360) + 360) % 360 })} unit="°" step={1} />
             <NumField label={zone.type === "shed" ? "Structure height" : "Structure (low edge)"} value={zone.mountHeight} onChange={(v) => onChange({ mountHeight: Math.max(0, v) })} unit="m" />
           </>
         )}
@@ -936,9 +1085,6 @@ function ZoneProps({ zone, stats, moduleLabel, units, canEdit, onBack, onChange,
           </span>
         </label>
         <NumField label="Column gap" value={zone.colGap} onChange={(v) => onChange({ colGap: Math.max(0, v) })} unit="m" step={0.01} />
-        <div className="mt-2 flex gap-2">
-          <button type="button" onClick={onAlign} className="flex-1 rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium hover:bg-slate-50">Align to roof edge</button>
-        </div>
         <div className="mt-2 flex gap-2">
           <button type="button" onClick={onFill} className="flex flex-1 items-center justify-center gap-1 rounded-md bg-teal-600 px-2 py-2 text-xs font-semibold text-white hover:bg-teal-700"><Plus className="h-3.5 w-3.5" /> Panels</button>
           <button type="button" onClick={onClear} className="flex-1 rounded-md border border-slate-200 px-2 py-2 text-xs font-medium hover:bg-slate-50">Clear panels</button>
@@ -980,7 +1126,7 @@ function BlockerProps({ blocker, zones, canEdit, onBack, onChange, onDelete }: {
 }
 
 function InverterPanel(p: {
-  canEdit: boolean; inverters: { inst: { id: string; modelId: string }; model: InverterModel }[]; strings: StringDef[]; moduleModel: ModuleModel; temps: { minC: number; maxC: number }; tempSource: string;
+  canEdit: boolean; inverters: { inst: { id: string; modelId: string }; model: InverterModel }[]; strings: StringDef[]; moduleModel: ModuleModel; moduleFor: (s: StringDef) => ModuleModel; temps: { minC: number; maxC: number }; tempSource: string;
   leftToString: number; systemKw: number; activeString: string[] | null; activeTarget: { inverterIndex: number; mppt: number };
   onAddInverter: () => void; onRemoveInverter: (i: number) => void; onAutoString: () => void; onClearStrings: () => void; onRemoveString: (id: string) => void;
   onMoveString: (id: string, inv: number, mppt: number) => void; onTemps: (t: { minC: number; maxC: number }) => void; onStartManual: () => void; onFinishManual: () => void; onCancelManual: () => void;
@@ -1017,7 +1163,9 @@ function InverterPanel(p: {
               <button type="button" onClick={() => p.onRemoveInverter(i)} className="text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
             </div>
             {p.strings.map((s, si) => ({ s, si })).filter(({ s }) => s.inverterIndex === i).map(({ s, si }) => {
-              const chk = checkString(s, p.strings, p.moduleModel, iv.model, p.temps);
+              const sm = p.moduleFor(s);
+              const chk = checkString(s, p.strings, sm, iv.model, p.temps);
+              const sl = stringLimits(sm, iv.model, p.temps);
               return (
                 <div key={s.id} className="border-b border-slate-50 px-3 py-2 text-xs last:border-0">
                   <div className="flex items-center gap-2">
@@ -1028,7 +1176,7 @@ function InverterPanel(p: {
                     </select>
                     <button type="button" onClick={() => p.onRemoveString(s.id)} className="text-slate-400 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>
                   </div>
-                  <div className="mt-1 text-slate-500">Voc (cold) {(s.panels.length * lim.vocCold).toFixed(0)} V · Vmp (hot) {(s.panels.length * lim.vmpHot).toFixed(0)} V</div>
+                  <div className="mt-1 text-slate-500">Voc (cold) {(s.panels.length * sl.vocCold).toFixed(0)} V · Vmp (hot) {(s.panels.length * sl.vmpHot).toFixed(0)} V</div>
                   {chk.issues.map((x) => <div key={x} className="mt-0.5 text-red-600">⚠ {x}</div>)}
                 </div>
               );

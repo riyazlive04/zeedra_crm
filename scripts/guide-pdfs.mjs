@@ -22,6 +22,7 @@ const DOCS = [
   { file: "telecaller.md", title: "Tele-caller Guide" },
   { file: "field-sales.md", title: "Field Sales Guide" },
   { file: "installer.md", title: "Installer Guide" },
+  { file: "roof-design.md", title: "Roof Design & Shading Guide" },
 ];
 
 function slugify(text) {

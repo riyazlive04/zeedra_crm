@@ -78,6 +78,24 @@ export interface Zone {
   parapetHeight: number;
   /** Module keys ("row:col") the user removed by hand. */
   removed: string[];
+  /** Keep the panel direction square to the roof (recomputed from the outline when corners move).
+   *  Turned off as soon as the user sets the direction by hand. */
+  alignToRoof?: boolean;
+  /** Array position chosen by the user (metres along the row, metres up the slope). Null = automatic best fit. */
+  shift?: { u: number; w: number } | null;
+  /** This zone's own module (e.g. a different wattage on one roof). Null = the design's module. */
+  module?: ModuleSpec | null;
+  moduleId?: string | null;
+}
+
+/** A module placed by hand, off the grid: dragged out of the array or added one by one. */
+export interface FreePanel {
+  id: string;
+  zoneId: string;
+  center: LatLng;
+  /** Degrees added to the zone's panel azimuth (turn the module on the roof). */
+  rotation: number;
+  orientation: "portrait" | "landscape";
 }
 
 export type BlockerKind = "rect" | "polygon" | "circle" | "tree";
@@ -108,6 +126,8 @@ export interface DesignData {
   performanceRatio: number;
   /** Optional drone / orthophoto overlay. */
   overlay?: { url: string; bounds: [LatLng, LatLng]; opacity: number } | null;
+  /** Modules placed by hand, outside the automatic grid. */
+  freePanels?: FreePanel[];
   /** Catalog module id the `module` spec came from. */
   moduleId?: string;
   customModules?: ModuleModel[];
@@ -134,6 +154,7 @@ export function defaultZone(id: string, name: string, points: LatLng[], lat: num
     name,
     points,
     type: "flat",
+    alignToRoof: true,
     height: 6,
     roofTilt: 20,
     roofAzimuth: lat >= 0 ? 180 : 0,
@@ -340,6 +361,12 @@ export interface PanelGeom {
   removed: boolean;
   zTop: number;
   center: Vec2;
+  /** Rated power of this module, W (zones can use different modules). */
+  watt: number;
+  /** Placed by hand (key is "free:<id>"). */
+  free?: boolean;
+  /** Hand-placed module that overlaps a roof edge, the setback, a blocker or another module. */
+  clash?: string | null;
 }
 
 type Obstruction =
@@ -350,7 +377,7 @@ export interface Scene {
   proj: Projection;
   panels: PanelGeom[];
   obstructions: Obstruction[];
-  zoneStats: { zoneId: string; areaM2: number; panelCount: number; kw: number; rowGap: number }[];
+  zoneStats: { zoneId: string; areaM2: number; panelCount: number; kw: number; rowGap: number; azimuth: number; shiftNow: { u: number; w: number } }[];
 }
 
 /** Horizontal gap so a row never shades the next between 9 am and 3 pm solar time on the winter solstice. */
@@ -385,14 +412,48 @@ function zoneAxes(azimuthDeg: number) {
   return { f, r: { x: Math.cos(A), y: -Math.sin(A) }, b: { x: -f.x, y: -f.y } };
 }
 
+/**
+ * The direction panels should face so the array sits square to the roof: the outward normal of
+ * one of the roof's longer edges, choosing the one that faces closest to the equator (south in
+ * India). Turning panels 10-15 degrees off due south costs well under 1% of yield, and it's how
+ * installers mount them, parallel to the parapet.
+ */
+export function roofAlignedAzimuth(points: LatLng[], lat: number): number | null {
+  if (points.length < 3) return null;
+  const k = Math.cos((points[0].lat * Math.PI) / 180);
+  const pts = points.map((p) => ({ x: p.lng * k, y: p.lat }));
+  const ideal = lat >= 0 ? 180 : 0;
+  const edges = pts.map((a, i) => {
+    const b2 = pts[(i + 1) % pts.length];
+    return { len: Math.hypot(b2.x - a.x, b2.y - a.y), az: (Math.atan2(b2.x - a.x, b2.y - a.y) * 180) / Math.PI };
+  });
+  const longest = Math.max(...edges.map((e) => e.len));
+  let best: number | null = null, bestDiff = Infinity;
+  for (const e of edges) {
+    if (e.len < longest * 0.3) continue; // ignore short jogs in the outline
+    for (const n of [e.az + 90, e.az - 90]) {
+      const az = ((n % 360) + 360) % 360;
+      const diff = Math.abs(((az - ideal + 540) % 360) - 180);
+      if (diff < bestDiff - 1e-9) { bestDiff = diff; best = Math.round(az * 10) / 10; }
+    }
+  }
+  return best;
+}
+
 /** Module tilt / azimuth / gaps / structure height actually used for a zone, by roof type. */
-export function effectiveZone(zone: Zone): Zone {
+export function effectiveZone(rawZone: Zone): Zone {
+  let zone = rawZone;
+  if (zone.alignToRoof) {
+    const az = roofAlignedAzimuth(zone.points, zone.points[0]?.lat ?? 13);
+    if (az !== null) zone = zone.type === "tilted" ? { ...zone, roofAzimuth: az } : { ...zone, azimuth: az };
+  }
   if (zone.type === "tilted") return { ...zone, tilt: zone.roofTilt, azimuth: zone.roofAzimuth, rowGap: zone.rowGap ?? 0.02, mountHeight: Math.min(zone.mountHeight, 0.2), parapetHeight: 0 };
   return zone;
 }
 
 /** Roof surface height above ground at a plan point (sloped for tilted roofs). */
-export function roofSurfaceZ(zone: Zone, p: Vec2, polyLocal: Vec2[]): number {
+export function roofSurfaceZ(rawZone: Zone, p: Vec2, polyLocal: Vec2[]): number {
+  const zone = rawZone.alignToRoof ? effectiveZone(rawZone) : rawZone;
   if (zone.type !== "tilted" || polyLocal.length < 3) return zone.height;
   const { b } = zoneAxes(zone.roofAzimuth);
   const minW = Math.min(...polyLocal.map((q) => q.x * b.x + q.y * b.y));
@@ -409,7 +470,7 @@ function layoutZone(rawZone: Zone, mod: ModuleSpec, proj: Projection, blockerPol
   const t = zone.tilt * D2R;
   const depth = slopeLen * Math.cos(t);
   const rowGap = zone.rowGap ?? (zone.tilt > 0 ? autoRowGap(lat, zone.tilt, slopeLen, zone.azimuth) : 0.05);
-  if (poly.length < 3) return { panels: out, rowGap };
+  if (poly.length < 3) return { panels: out, rowGap, azimuth: zone.azimuth, shiftNow: { u: 0, w: 0 } };
   const { r, b } = zoneAxes(zone.azimuth);
   const toUW = (p: Vec2) => ({ u: p.x * r.x + p.y * r.y, w: p.x * b.x + p.y * b.y });
   const fromUW = (u: number, w: number): Vec2 => ({ x: u * r.x + w * b.x, y: u * r.y + w * b.y });
@@ -429,11 +490,16 @@ function layoutZone(rawZone: Zone, mod: ModuleSpec, proj: Projection, blockerPol
     return true;
   };
 
-  // Try a few grid phases and keep the one that fits the most modules.
+  // Try a few grid phases and keep the one that fits the most modules, unless the user has
+  // positioned the array themselves (then use exactly their shift).
   let best: { u: number; w: number; row: number; col: number }[] = [];
-  const phases = [0, 0.25, 0.5, 0.75];
-  for (const pu of phases)
-    for (const pw of phases) {
+  let bestPhase: [number, number] = [0, 0];
+  const frac = (x: number) => ((x % 1) + 1) % 1;
+  const phasePairs: [number, number][] = zone.shift
+    ? [[frac(zone.shift.u / colPitch), frac(zone.shift.w / rowPitch)]]
+    : [0, 0.25, 0.5, 0.75].flatMap((a) => [0, 0.25, 0.5, 0.75].map((b2) => [a, b2] as [number, number]));
+  for (const [pu, pw] of phasePairs) {
+    {
       const cells: { u: number; w: number; row: number; col: number }[] = [];
       let row = 0;
       for (let w = minW + sb + pw * rowPitch - rowPitch; w + depth <= maxW - sb + 1e-6; w += rowPitch, row++) {
@@ -445,8 +511,9 @@ function layoutZone(rawZone: Zone, mod: ModuleSpec, proj: Projection, blockerPol
           if (fits(c)) cells.push({ u, w, row, col });
         }
       }
-      if (cells.length > best.length) best = cells;
+      if (cells.length > best.length || (zone.shift && !best.length)) { best = cells; bestPhase = [pu, pw]; }
     }
+  }
 
   // Renumber rows/cols densely so removal keys stay stable regardless of the chosen phase.
   const rows = [...new Set(best.map((c) => Math.round(c.w * 1000)))].sort((a, b) => a - b);
@@ -476,9 +543,50 @@ function layoutZone(rawZone: Zone, mod: ModuleSpec, proj: Projection, blockerPol
       removed: removed.has(key),
       zTop: zBase + slopeLen * Math.sin(t),
       center: polygonCentroid(corners),
+      watt: mod.watt,
     });
   }
-  return { panels: out, rowGap };
+  // Where the grid sits now, as a shift the user can nudge from.
+  return { panels: out, rowGap, azimuth: zone.azimuth, shiftNow: zone.shift ?? { u: bestPhase[0] * colPitch, w: bestPhase[1] * rowPitch } };
+}
+
+/** The module a zone uses: its own, or the design's. */
+export function zoneModule(zone: Zone, design: DesignData): ModuleSpec {
+  return zone.module ?? design.module;
+}
+
+/** Geometry for a hand-placed module, plus whether it clashes with the roof edge / setback / blockers. */
+function freePanelGeom(fp: FreePanel, rawZone: Zone, mod: ModuleSpec, proj: Projection, blockerPolys: Vec2[][], index: number): PanelGeom {
+  const zone = effectiveZone(rawZone);
+  const poly = zone.points.map(proj.toLocal);
+  const portrait = fp.orientation === "portrait";
+  const slopeLen = portrait ? mod.length : mod.width;
+  const rowLen = portrait ? mod.width : mod.length;
+  const t = zone.tilt * D2R;
+  const depth = slopeLen * Math.cos(t);
+  const { r, b } = zoneAxes(zone.azimuth + (fp.rotation || 0));
+  const c = proj.toLocal(fp.center);
+  const at = (du: number, dw: number): Vec2 => ({ x: c.x + r.x * du + b.x * dw, y: c.y + r.y * du + b.y * dw });
+  const corners = [at(-rowLen / 2, -depth / 2), at(rowLen / 2, -depth / 2), at(rowLen / 2, depth / 2), at(-rowLen / 2, depth / 2)];
+  const U: Vec3 = { x: r.x, y: r.y, z: 0 };
+  const V: Vec3 = { x: b.x * Math.cos(t), y: b.y * Math.cos(t), z: Math.sin(t) };
+  let N = cross3(U, V);
+  if (N.z < 0) N = { x: -N.x, y: -N.y, z: -N.z };
+  const zBase = roofSurfaceZ(zone, corners[0], poly) + zone.mountHeight;
+  let clash: string | null = null;
+  if (poly.length >= 3) {
+    if (!corners.every((p) => pointInPolygon(p, poly)) || poly.some((p) => pointInPolygon(p, corners))) clash = "Outside the roof";
+    else if (corners.some((p) => poly.some((_, i) => distPointSegment(p, poly[(i + poly.length - 1) % poly.length], poly[i]) < Math.max(0, zone.setback) - 1e-6))) clash = "Inside the setback";
+    else if (blockerPolys.some((bp) => polygonsTooClose(corners, bp, 0.3))) clash = "Too close to a blocker";
+  }
+  return {
+    index, zoneId: rawZone.id, key: `free:${fp.id}`, corners, O: { x: corners[0].x, y: corners[0].y, z: zBase }, U, V, N,
+    w: rowLen, l: slopeLen, longAlongV: portrait, removed: false, zTop: zBase + slopeLen * Math.sin(t), center: c, watt: mod.watt, free: true, clash,
+  };
+}
+
+function cornersOverlap(a: Vec2[], b: Vec2[]): boolean {
+  return polygonsTooClose(a, b, 0);
 }
 
 export function buildScene(design: DesignData): Scene {
@@ -511,10 +619,21 @@ export function buildScene(design: DesignData): Scene {
         obstructions.push({ kind: "prism", poly: wall, zBot: z.height, zTop: z.height + z.parapetHeight, c, r: len / 2 + 0.2, label: `${z.name} parapet` });
       }
     }
-    const { panels: zp, rowGap } = layoutZone(z, design.module, proj, blockerPolys, lat, panels.length);
+    const mod = zoneModule(z, design);
+    const { panels: zp, rowGap, azimuth, shiftNow } = layoutZone(z, mod, proj, blockerPolys, lat, panels.length);
     panels.push(...zp);
-    const active = zp.filter((p) => !p.removed).length;
-    zoneStats.push({ zoneId: z.id, areaM2: poly.length >= 3 ? polygonArea(poly) : 0, panelCount: active, kw: (active * design.module.watt) / 1000, rowGap });
+    for (const fp of (design.freePanels ?? []).filter((f) => f.zoneId === z.id)) panels.push(freePanelGeom(fp, z, mod, proj, blockerPolys, panels.length));
+    const zoneActive = panels.filter((p) => p.zoneId === z.id && !p.removed);
+    zoneStats.push({
+      zoneId: z.id, areaM2: poly.length >= 3 ? polygonArea(poly) : 0, panelCount: zoneActive.length,
+      kw: zoneActive.reduce((a, p) => a + p.watt, 0) / 1000, rowGap, azimuth, shiftNow,
+    });
+  }
+  // Hand-placed modules that sit on top of another module are flagged too.
+  const live = panels.filter((p) => !p.removed);
+  for (const p of live) {
+    if (!p.free || p.clash) continue;
+    if (live.some((q) => q !== p && Math.hypot(q.center.x - p.center.x, q.center.y - p.center.y) < Math.hypot(p.w, p.l) && cornersOverlap(p.corners, q.corners))) p.clash = "Overlaps another module";
   }
   for (const p of panels) {
     if (p.removed) continue;
@@ -708,7 +827,7 @@ export function annualAnalysis(design: DesignData, scene: Scene = buildScene(des
   const year = opts.year ?? 2025;
   const clear = opts.monthlyClearness ?? Array(12).fill(0.75);
   const active = scene.panels.filter((p) => !p.removed);
-  const kwEach = design.module.watt / 1000;
+  const kwOf = (p: PanelGeom) => p.watt / 1000;
   const pr = design.performanceRatio || 0.8;
   const samples = active.map((p) => panelSamples(p, 5, 1));
   const svf = active.map((p) => skyViewFactor(p, scene.obstructions));
@@ -767,7 +886,7 @@ export function annualAnalysis(design: DesignData, scene: Scene = buildScene(des
         }
         unsh[i] += u; geo[i] += g; elec[i] += e;
         mUnsh[m] += u; mElec[m] += e;
-        mKwh[m] += e * kwEach * pr;
+        mKwh[m] += e * kwOf(p) * pr;
       });
     }
   }
@@ -778,11 +897,11 @@ export function annualAnalysis(design: DesignData, scene: Scene = buildScene(des
     solarAccess: unsh[i] ? elec[i] / unsh[i] : 1,
     geometricAccess: unsh[i] ? geo[i] / unsh[i] : 1,
     skyView: svf[i],
-    annualKwh: elec[i] * kwEach * pr,
+    annualKwh: elec[i] * kwOf(p) * pr,
   }));
   const tU = unsh.reduce((a, b) => a + b, 0), tE = elec.reduce((a, b) => a + b, 0), tG = geo.reduce((a, b) => a + b, 0);
   const annualKwh = mKwh.reduce((a, b) => a + b, 0);
-  const systemKw = active.length * kwEach;
+  const systemKw = active.reduce((a, p) => a + kwOf(p), 0);
   return {
     panels,
     shadingLossPct: tU ? (1 - tE / tU) * 100 : 0,
@@ -818,7 +937,7 @@ export function designSummary(design: DesignData, scene: Scene = buildScene(desi
   const panelCount = scene.zoneStats.reduce((a, z) => a + z.panelCount, 0);
   return {
     panelCount,
-    systemKw: Math.round(((panelCount * design.module.watt) / 1000) * 100) / 100,
+    systemKw: Math.round(scene.zoneStats.reduce((a, z) => a + z.kw, 0) * 100) / 100,
     areaM2: Math.round(scene.zoneStats.reduce((a, z) => a + z.areaM2, 0) * 100) / 100,
   };
 }
@@ -832,7 +951,16 @@ export function parseDesign(raw: unknown, fallbackCenter: LatLng): DesignData {
     ...d,
     version: 1,
     module: { ...DEFAULT_MODULE, ...(d.module ?? {}) },
-    zones: (d.zones ?? []).map((z) => ({ ...defaultZone(z.id, z.name, z.points, base.center.lat), ...z })),
+    zones: (d.zones ?? []).map((z) => {
+      const merged = { ...defaultZone(z.id, z.name, z.points, base.center.lat), ...z };
+      // Designs saved before roof alignment existed: follow the roof only if nobody changed the
+      // direction from the default (an intentional direction is kept).
+      if (z.alignToRoof === undefined) {
+        const untouched = (merged.type === "tilted" ? merged.roofAzimuth : merged.azimuth) === (base.center.lat >= 0 ? 180 : 0);
+        merged.alignToRoof = untouched;
+      }
+      return merged;
+    }),
     blockers: (d.blockers ?? []).map((b) => ({ ...b, base: b.base ?? 0 })),
   };
 }

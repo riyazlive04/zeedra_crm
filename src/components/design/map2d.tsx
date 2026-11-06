@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { MapContainer, TileLayer, Polygon, Polyline, Circle, Marker, ImageOverlay, CircleMarker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Polyline, Circle, Marker, ImageOverlay, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Blocker, DesignData, LatLng, Scene, Vec2 } from "@/lib/solar/shading";
 import { panelId, fmtLen, STRING_COLORS, type Selection, type Tool } from "./common";
@@ -30,6 +30,12 @@ export interface Map2DProps {
   onEditZonePoints: (id: string, pts: LatLng[]) => void;
   onEditBlocker: (id: string, patch: Partial<Blocker>) => void;
   onPanelClick: (pid: string) => void;
+  /** Drag a module to a new spot (grid modules become hand-placed). Omit to disable dragging. */
+  onPanelMove?: (pid: string, center: LatLng) => void;
+  /** Drag a zone's whole array. */
+  onArrayMove?: (zoneId: string, from: LatLng, to: LatLng) => void;
+  /** "Add panel" tool: place a module where clicked. */
+  onAddPanel?: (at: LatLng) => void;
   onPlaceInverter: (p: LatLng) => void;
   onContext: (target: { type: "zone" | "blocker" | "panel"; id: string }, x: number, y: number) => void;
   onView: (center: LatLng, zoom: number) => void;
@@ -40,6 +46,13 @@ export interface Map2DProps {
 
 const ll = (p: LatLng): [number, number] => [p.lat, p.lng];
 const toLL = (p: L.LatLng): LatLng => ({ lat: p.lat, lng: p.lng });
+
+const arrayIcon = L.divIcon({
+  className: "",
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  html: `<div title="Drag to move the whole panel array" style="width:30px;height:30px;border-radius:8px;background:#1d4ed8;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);display:grid;place-items:center;cursor:move"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/></svg></div>`,
+});
 
 function vertexIcon(kind: "vertex" | "mid" | "move") {
   const size = kind === "mid" ? 10 : kind === "move" ? 18 : 12;
@@ -94,6 +107,7 @@ function Controller({ props, draft, setDraft, setCursor }: { props: Map2DProps; 
     click(e) {
       const p = toLL(e.latlng);
       if (tool === "inverter") return props.onPlaceInverter(p);
+      if (tool === "addPanel") return props.onAddPanel?.(p);
       if (tool === "select" || tool === "string") {
         if (tool === "select") props.onSelect(null);
         return;
@@ -141,6 +155,41 @@ function Controller({ props, draft, setDraft, setCursor }: { props: Map2DProps; 
   return null;
 }
 
+/** Follows the mouse while a module is dragged; drops it on release (needs a few cm of movement). */
+/** Development only: lets browser tests turn map coordinates into screen positions. */
+function DevMapHandle() {
+  const map = useMap();
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") (window as unknown as { __designMap?: L.Map }).__designMap = map;
+  }, [map]);
+  return null;
+}
+
+function PanelDragger({ drag, setDrag, onDone }: { drag: { pid: string; start: LatLng; cur: LatLng } | null; setDrag: (d: { pid: string; start: LatLng; cur: LatLng } | null) => void; onDone: (pid: string, delta: LatLng) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    if (drag) map.dragging.disable();
+    else map.dragging.enable();
+  }, [drag, map]);
+  useMapEvents({
+    mousemove(e) {
+      if (drag) setDrag({ ...drag, cur: toLL(e.latlng) });
+    },
+    mouseup(e) {
+      if (!drag) return;
+      const end = toLL(e.latlng);
+      const moved = distM(drag.start, end);
+      setDrag(null);
+      if (moved > 0.15) {
+        dragFlag.current = true;
+        onDone(drag.pid, { lat: end.lat - drag.start.lat, lng: end.lng - drag.start.lng });
+      }
+    },
+  });
+  return null;
+}
+const dragFlag = { current: false };
+
 function FitOnce({ center, zoom, fitKey }: { center: LatLng; zoom: number; fitKey: number }) {
   const map = useMap();
   const first = useRef(true);
@@ -170,6 +219,8 @@ function BoundsGrabber({ onReady }: { onReady: (get: () => [LatLng, LatLng]) => 
 export default function Map2D(props: Map2DProps & { onBoundsGetter?: (get: () => [LatLng, LatLng]) => void }) {
   const { design, scene, selection, tool, labelSize, units } = props;
   const [draft, setDraft] = useState<LatLng[]>([]);
+  const [drag, setDrag] = useState<{ pid: string; start: LatLng; cur: LatLng } | null>(null);
+
   const [cursor, setCursor] = useState<LatLng | null>(null);
   useEffect(() => setDraft([]), [tool]);
   const src = TILE_SOURCES[props.tileSource];
@@ -282,6 +333,13 @@ export default function Map2D(props: Map2DProps & { onBoundsGetter?: (get: () =>
         </>
       )}
       <Controller props={props} draft={draft} setDraft={setDraft} setCursor={setCursor} />
+      <DevMapHandle />
+      <PanelDragger drag={drag} setDrag={setDrag} onDone={(pid, delta) => {
+        const p = panelById.get(pid);
+        if (!p || !props.onPanelMove) return;
+        const c = toLatLng(p.center);
+        props.onPanelMove(pid, { lat: c.lat + delta.lat, lng: c.lng + delta.lng });
+      }} />
 
       {/* Zones */}
       {design.zones.map((z) => (
@@ -335,6 +393,8 @@ export default function Map2D(props: Map2DProps & { onBoundsGetter?: (get: () =>
             pathOptions={
               p.removed
                 ? { color: "#e2e8f0", weight: 1, dashArray: "3 3", fillOpacity: 0.05 }
+                : p.clash
+                ? { color: "#ef4444", weight: 2.5, dashArray: "4 2", fillColor: props.panelColors[i] ?? "#1e3a8a", fillOpacity: 0.7 }
                 : {
                     color: inActive ? "#fff" : si !== undefined ? STRING_COLORS[si % STRING_COLORS.length] : "#cbd5e1",
                     weight: inActive || si !== undefined ? 2 : 0.8,
@@ -343,16 +403,56 @@ export default function Map2D(props: Map2DProps & { onBoundsGetter?: (get: () =>
                   }
             }
             eventHandlers={{
+              mousedown: (e) => {
+                // Press and drag a module to move it; a plain click still removes / restores it.
+                if (tool !== "select" || !props.onPanelMove || p.removed || e.originalEvent.button !== 0) return;
+                L.DomEvent.stop(e);
+                setDrag({ pid, start: toLL(e.latlng), cur: toLL(e.latlng) });
+              },
               click: (e) => {
                 if (tool !== "select" && tool !== "string") return;
                 L.DomEvent.stop(e);
+                if (dragFlag.current) { dragFlag.current = false; return; }
                 props.onPanelClick(pid);
               },
               contextmenu: ctx("panel", pid),
             }}
-          />
+          >
+            {p.clash && <Tooltip sticky>{p.clash}: drag it to a free spot</Tooltip>}
+          </Polygon>
         );
       })}
+
+      {/* Module being dragged */}
+      {drag && (() => {
+        const p = panelById.get(drag.pid);
+        if (!p) return null;
+        const dLat = drag.cur.lat - drag.start.lat, dLng = drag.cur.lng - drag.start.lng;
+        return <Polygon positions={p.corners.map((c: Vec2) => { const q = toLatLng(c); return [q.lat + dLat, q.lng + dLng] as [number, number]; })} interactive={false} pathOptions={{ color: "#fff", weight: 2, dashArray: "4 3", fillColor: "#3b82f6", fillOpacity: 0.6 }} />;
+      })()}
+
+      {/* Whole-array handle for the selected zone */}
+      {selection?.type === "zone" && canSelect && props.onArrayMove && (() => {
+        const grid = scene.panels.filter((p) => p.zoneId === selection.id && !p.removed && !p.free);
+        if (!grid.length) return null;
+        const c = { x: grid.reduce((a, p) => a + p.center.x, 0) / grid.length, y: grid.reduce((a, p) => a + p.center.y, 0) / grid.length };
+        // Sit just outside the array's front (low) edge so the handle never covers a module.
+        const vx = grid[0].V.x, vy = grid[0].V.y;
+        const vl = Math.hypot(vx, vy) || 1;
+        const ux = vx / vl, uy = vy / vl;
+        const front = Math.min(...grid.flatMap((p) => p.corners.map((q) => (q.x - c.x) * ux + (q.y - c.y) * uy)));
+        const at = toLatLng({ x: c.x + ux * (front - 1.1), y: c.y + uy * (front - 1.1) });
+        return (
+          <Marker
+            key={`arr-${at.lat.toFixed(7)}-${at.lng.toFixed(7)}`}
+            position={ll(at)}
+            icon={arrayIcon}
+            draggable
+            zIndexOffset={1000}
+            eventHandlers={{ dragend: (e) => props.onArrayMove!(selection.id, at, toLL((e.target as L.Marker).getLatLng())) }}
+          />
+        );
+      })()}
 
       {/* Strings */}
       {(design.strings ?? []).map((s, i) => {
